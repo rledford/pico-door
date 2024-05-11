@@ -3,251 +3,171 @@ version 42
 __lua__
 -- main
 
-bullets = {}
+-- globals --
+-------------
+
+objects = {}
+types = {}
+
+k_left = 0
+k_right = 1
+k_up = 2
+k_down = 3
+k_shoot = 4
+
+-- entry point --
+-----------------
 
 function _init()
 	cls()
+	plr = init_object(player, 64,64)
 end
 
 function _update60()
-	alt.update()
-	for i=#pbull,1,-1 do
-		pbull[i].update()
-		if pbull[i].ticks <= 0 then
-			del(pbull, pbull[i])
+	foreach(objects,function(obj)
+		obj.move()
+		if obj.type.update~=nil then
+			obj.type.update(obj)
 		end
-	end
+	end)
 end
 
 function _draw()
 	cls()
 	map()
-	camera(alt.x-60,alt.y-60)
-	print(alt.x/8)
-	print(alt.y/8)
-	print(alt.clip)
-	print(alt.reloading)
-	for i=1,#pbull do
-		pbull[i].draw()
-	end
-	alt.draw()
-end
--->8
--- actor
-
-function make_actor(x,y)
-	return {
-		x=x or 0,
-		y=y or 0,
-		mvs={},
-		vx=0,
-		vy=0,
-		spd=0.6,
-		accl=0.1,
-		dccl=0.9,
-		hitw=0.4,
-		hith=0.4,
-		face=1,
-		spr=0
-	}
-end
--->8
--- player
-
-plr = make_actor(64,64)
-plr.spr = 32
-plr.update = function()
-	local dx = 0
-	local dy = 0
+	foreach(objects,function(obj)
+		draw_object(obj)
+	end)
 end
 
-plr.draw = function()
-	spr(plr.spr,plr.x-4,plr.y-4)
-end
+-- player --
+------------
 
-plr.update = function()
-	local dx = 0
-	local dy = 0
-	if btn(⬅️) then
-		dx -= 1
-	end
-	if btn(➡️) then
-		dx += 1
-	end
-	if btn(⬆️) then
-		dy -= 1
-	end
-	if btn(⬇️) then
-		dy += 1
-	end
-	
-	if dx == 0 then
-		if abs(plr.vx) > 0 then
-			--deccelerate
-			plr.vx *= plr.dccl
-			if abs(plr.vx) < 0.1 then
-				plr.vx = 0
+player = {
+	init=function(this)
+		this.tile = 32
+		this.fire_rate=20 -- shoot every {fire_rate} ticks
+		this.fire_ticks=0
+		this.reload_rate=30 -- reload in {reloat_rate} ticks
+		this.reload_ticks=0
+		this.hitbox={2,2,4,4}
+		this.target=nil
+		this.spr = this.tile
+	end,
+	update=function(this)
+		local dx = 0
+		local dy = 0
+		if btnp(k_left) then
+			dx = -8
+		elseif btnp(k_right) then
+			dx = 8
+		elseif btnp(k_up) then
+			dy = -8
+		elseif btnp(k_down) then
+			dy = 8
+		end
+		if dx ~= 0 or dy ~= 0 then
+			local from = count(this.moves) and this.moves[#this.moves] or {x=this.x,y=this.y}
+			dx += from.x
+			dy += from.y
+			if this.can_move_to(dx/8, dy/8) then
+				add(this.moves, {x=dx,y=dy})
 			end
 		end
-	else
-		plr.vx += dx * plr.accl * plr.spd
-		if abs(plr.vx) > plr.spd then
-			plr.vx = plr.spd * dx
-		end
+	end,
+	draw=function(this)
+		spr(this.spr,this.x,this.y,1,1)
 	end
-	if dy == 0 then
-		if abs(plr.vy) > 0 then
-			--deccelerate
-			plr.vy *= plr.dccl
-			if abs(plr.vy) < 0.1 then
-				plr.vy = 0
-			end
-		end
-	else
-		plr.vy += dy * plr.accl * plr.spd
-		if abs(plr.vy) > plr.spd then
-			plr.vy = plr.spd * dy
-		end
-	end
-	
-	plr.x += plr.vx
-	plr.y += plr.vy
-end
-
-plr.move = function()
-end
--->8
--- alt
-
-alt = make_actor(64,64)
-alt.spr = 32
-alt.ratef = 10
-alt.reloadt = 40
-alt.reloadf = 0
-alt.reloading = false
-alt.nextf = 0
-alt.maxclip = 16
-alt.clip = alt.maxclip
-
-alt.update = function()
-	alt.handle_input()
-	alt.move()
-	alt.shoot()
-end
-
-alt.move = function()
-	if #alt.mvs == 0 then
-		return
-	end
-	local dx,dy = unpack(alt.mvs[1])
-	if alt.x ~= dx then
-		local sign = alt.x - dx > 0 and -1 or 1
-		alt.x += sign * 1
-	end
-	if alt.y ~= dy then
-		local sign = alt.y - dy > 0 and -1 or 1
-		alt.y += sign * 1
-	end
-	if alt.x == dx and alt.y == dy then
-		alt.pop_mvs()
-	end
-end
-
-alt.draw = function()
-	spr(alt.spr, alt.x, alt.y)
-end
-
-alt.handle_input = function()
-	mx = 0
-	my = 0
-	if btnp(⬅️) then
-		mx = -8
-	elseif btnp(➡️) then
-		mx = 8
-	elseif btnp(⬆️) then
-		my = -8
-	elseif btnp(⬇️) then
-		my = 8
-	end
-	if mx ~= 0 or my ~= 0 then
-		local from_x,from_y = unpack(#alt.mvs and alt.mvs[#alt.mvs] or {alt.x,alt.y})
-		mx += from_x
-		my += from_y
-		if alt.can_move_to(mx/8, my/8) then
-			alt.mvs[#alt.mvs+1] = {mx,my}
-		end
-	end
-end
-
-alt.shoot = function()
-	if alt.reloading then
-		alt.reloadf = max(alt.reloadf - 1, 0)
-		if alt.reloadf == 0 then
-			alt.reloading = false
-			alt.clip = alt.maxclip
-		end
-		
-		return
-	end
-	if alt.nextf > 0 then
-		alt.nextf = max(alt.nextf - 1, 0)
-		return
-	end
-	if btn(❎) then
-		make_bullet(pbull, 48, alt.x, alt.y, 1, 0,2)
-		alt.nextf = alt.ratef
-		alt.clip -= 1
-		if alt.clip <= 0 then
-			alt.reloadf = alt.reloadt
-			alt.reloading = true
-		end
-	end
-end
-
-alt.can_move_to = function(x,y)
-	return fget(mget(x,y)) == 0
-end
-
-alt.pop_mvs = function()
-	del(alt.mvs, alt.mvs[1])
-end
--->8
--- bullet
-
-pbull = {}
-ebull = {}
-
-function make_bullet(grp, s, x, y, vx, vy, spd)
-	local b = make_actor(x,y)
-	b.spr = s
-	b.vx = vx
-	b.vy = vy
-	b.spd = spd or 1
-	b.ticks = 30
-	
-	add(grp, b)
-	
-	b.update = function()
-		b.x += b.vx * b.spd
-		b.y += b.vy * b.spd
-		b.ticks -= 1
-		
-		if mget(b.x/8,b.y/8) == 3 then
-			mset(b.x/8,b.y/8,2)
-			b.ticks = 0
-		end
-	end
-	
-	b.draw = function()
-		spr(b.spr, b.x+4/8, b.y+4/8)
-	end
-end
--->8
--- world
-
-world = {
-	
 }
+
+-- object functions --
+----------------------
+
+function init_object(type,x,y)
+	local obj = {}
+	obj.type = type
+	obj.collideable = true
+	obj.interactive = true
+	obj.spr = type.tile
+	obj.flip = {x=false,y=false}
+	obj.x = x
+	obj.y = y
+	obj.hitbox = {x=0,y=0,w=8,h=8}
+	obj.spd=1
+	obj.moves = {}
+
+	obj.collide=function(type,ox,oy)
+		local other
+		for i=1,count(objects) do
+			other = objects[i]
+			if other ~= nil and other.type == type and other ~= obj and other.collideable and
+				other.x+other.hitbox.x+other.hitbox.w > obj.x+obj.hitbox.x+ox and
+				other.y+other.hitbox.y+other.hitbox.h > obj.y+obj.hitbox.y+oy and
+				other.x+other.hitbox.x < obj.x+obj.hitbox.x+obj.hitbox.w+ox and
+				other.y+other.hitbox.y < obj.y+obj.hitbox.y+obj.hitbox.h+oy then
+				return other
+			end
+		end
+	end
+
+	obj.check=function(type,ox,oy)
+		return obj.collide(type,ox,oy)
+	end
+
+	obj.move=function()
+		if count(obj.moves) == 0 then
+			return
+		end
+		local dest = obj.moves[1]
+		if obj.x ~= dest.x then
+			local sign = obj.x - dest.x > 0 and -1 or 1
+			obj.x += sign * 1
+		end
+		if obj.y ~= dest.y then
+			local sign = obj.y - dest.y > 0 and -1 or 1
+			obj.y += sign * 1
+		end
+		if obj.x == dest.x and obj.y == dest.y then
+			del(obj.moves, dest)
+		end
+	end
+
+	obj.can_move_to = function(x,y)
+		return fget(mget(x,y)) == 0
+	end
+
+	obj.move_to = function(x,y)
+		add(obj.moves, {x=x, y=y})
+	end
+
+	add(objects, obj)
+	
+	if obj.type.init~=nil then
+		obj.type.init(obj)
+	end
+
+	return obj
+end
+
+function destroy_object(obj)
+	del(objects, obj)
+end
+
+function move_object(obj)
+	if obj.type.move ~= nil then
+		obj.type.move(obj)
+	end
+end
+
+-- drawing --
+-------------
+function draw_object(obj)
+	if obj.type.draw ~= nil then
+		obj.type.draw(obj)
+	elseif obj.spr > 0 then
+		spr(obj.spr, obj.x, obj.y, 1, 1)
+	end
+end
 __gfx__
 00000000555555556666666644444444111111119999999900000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000555555556666666644444444111111119aaaaaa900000000000000000000000000000000000000000000000000000000000000000000000000000000
