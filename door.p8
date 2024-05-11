@@ -22,6 +22,7 @@ end
 function _draw()
 	cls()
 	map()
+	camera(alt.x-60,alt.y-60)
 	print(alt.x/8)
 	print(alt.y/8)
 	print(alt.clip)
@@ -230,6 +231,11 @@ function make_bullet(grp, s, x, y, vx, vy, spd)
 		b.x += b.vx * b.spd
 		b.y += b.vy * b.spd
 		b.ticks -= 1
+		
+		if mget(b.x/8,b.y/8) == 3 then
+			mset(b.x/8,b.y/8,2)
+			b.ticks = 0
+		end
 	end
 	
 	b.draw = function()
