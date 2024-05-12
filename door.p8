@@ -7,7 +7,10 @@ __lua__
 -------------
 
 room = {x=0,y=0}
+camera_pos = {x=0,y=0}
+camera_spd = 4
 objects = {}
+transition_objects = {}
 types = {}
 
 k_left = 0
@@ -15,49 +18,66 @@ k_right = 1
 k_up = 2
 k_down = 3
 k_shoot = 4
-transition_room = false
+is_room_transition = false
+debug_hitbox=false
+
+update_fn = function()
+end
 
 -- entry point --
 -----------------
 
 function _init()
 	cls()
-	plr = init_object(player, 120, 64)
+	player = init_object(player_type, 120, 64)
+	update_fn = game_update
 end
 
 function _update60()
-	foreach(objects,function(obj)
-		obj.move()
-		if obj.type.update~=nil then
-			obj.type.update(obj)
-		end
-	end)
+	
 end
 
 function _draw()
 	cls()
-	camera(room.x * 16 * 8, room.y * 16 * 8)
+	update_fn()
 	map()
 	foreach(objects,function(obj)
 		draw_object(obj)
+	end)
+	print(camera_pos.x, camera_pos.x, 0)
+	print(camera_pos.y, camera_pos.x, 10)
+end
+
+-- game update --
+-----------------
+
+function game_update()
+	foreach(objects,function(obj)
+		if obj.type.update~=nil then
+			obj.type.update(obj)
+		end
+		obj.move()
 	end)
 end
 
 -- player --
 ------------
 
-player = {
+player_type = {
 	init=function(this)
 		this.tile = 32
 		this.fire_rate=20 -- shoot every {fire_rate} ticks
 		this.fire_ticks=0
 		this.reload_rate=30 -- reload in {reloat_rate} ticks
 		this.reload_ticks=0
-		this.hitbox={2,2,4,4}
+		this.hitbox={x=1,y=2,w=4,h=4}
 		this.target=nil
 		this.spr = this.tile
 	end,
 	update=function(this)
+		if is_room_transition then
+			return
+		end
 		local dx = 0
 		local dy = 0
 		if btnp(k_left) then
@@ -77,11 +97,32 @@ player = {
 				add(this.moves, {x=dx,y=dy})
 			end
 		end
+		if this.target == nil then
+			find_player_target(this)
+		end
 	end,
 	draw=function(this)
 		spr(this.spr,this.x,this.y,1,1)
+		if this.target ~= nil then
+			spr(20, this.target.x, this.target.y)
+		end
+	end,
+	find_target=function(this)
+		
 	end
 }
+
+function find_player_target(obj)
+	local other = nil
+		for i=1,count(objects) do
+			other = objects[i]
+			if obj ~= other then
+				-- prioritize enemy over doors
+				obj.target = other
+				return
+			end
+		end
+end
 
 -- object functions --
 ----------------------
@@ -132,22 +173,18 @@ function init_object(type,x,y)
 		end
 		if obj.x == dest.x and obj.y == dest.y then
 			del(obj.moves, dest)
-			transition_room = false
 		end
 
-		if type == player and not transition_room then
-			if obj.x + 8 > room.x * 128 + 128 then
-				room.x += 1
-				transition_room = true
-			elseif obj.x < room.x * 128 then
-				room.x -= 1
-				transition_room = true
-			elseif obj.y + 8 > room.y * 128 + 128 then
-				room.y += 1
-				transition_room = true
-			elseif obj.y < room.y * 128 then
-				room.y -= 1
-				transition_room = true
+		-- TODO: try not to depend on is_room_transition
+		if type == player_type and not is_room_transition then
+			if obj.x + 4 > room.x * 128 + 128 then
+				start_room_transition(room.x + 1, room.y)
+			elseif obj.x + 4 < room.x * 128 then
+				start_room_transition(room.x - 1, room.y)
+			elseif obj.y + 4 > room.y * 128 + 128 then
+				start_room_transition(room.x, room.y + 1)
+			elseif obj.y + 4 < room.y * 128 then
+				start_room_transition(room.x, room.y - 1)
 			end
 		end
 	end
@@ -187,14 +224,54 @@ function draw_object(obj)
 	elseif obj.spr > 0 then
 		spr(obj.spr, obj.x, obj.y, 1, 1)
 	end
+	if debug_hitbox then
+		rect(obj.x+obj.hitbox.x,obj.y+obj.hitbox.y,obj.x+obj.hitbox.x+obj.hitbox.w,obj.y+obj.hitbox.y+obj.hitbox.h,8)
+	end
 end
 
 -- rooms --
 -----------
 
-function load_room(x,y)
-	room.x = x
-	room.y = y
+function start_room_transition(x_index,y_index)
+	if x_index == room.x and y_index == room.y then
+		return
+	end
+	is_room_transition = true
+	room.x = x_index
+	room.y = y_index
+	update_fn = update_room_transition
+	-- load next room
+end
+
+function update_room_transition()
+	player.move()
+	local diffx = room.x * 8 * 16 - camera_pos.x
+	local diffy = room.y * 8 * 16 - camera_pos.y
+
+	if diffx ~= 0 then
+		camera_pos.x += camera_spd * sign(diffx)
+	end
+	if diffy ~= 0 then
+		camera_pos.y += camera_spd * sign(diffy)
+	end
+
+	is_room_transition = diffx ~= 0 or diffy ~= 0
+	camera(camera_pos.x, camera_pos.y)
+
+	if not is_room_transition then
+		end_room_transition()
+	end
+end
+
+function end_room_transition()
+	update_fn = game_update
+end
+
+-- utils --
+-----------
+
+function sign(v)
+	return v > 0 and 1 or -1
 end
 __gfx__
 00000000555555556666666644444444111111119999999900000000000000000000000000000000000000000000000000000000000000006666666669a99a96
