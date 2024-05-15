@@ -30,7 +30,9 @@ end
 function _init()
 	cls()
 	player = init_object(player_type, 120, 64)
-	eye = init_object(eye_type, 64, 64)
+	init_object(eye_type, 64, 64)
+	init_object(eye_type, 32, 64)
+	init_object(door_type, 48, 64)
 	update_fn = game_update
 end
 
@@ -109,13 +111,10 @@ player_type = {
 				add(this.moves, {x=dx,y=dy})
 			end
 		end
-		if this.target == nil then
-			find_target_object(this, {eye_type})
-		else
-			if get_range(this, this.target) > this.target_radius then
+			find_target_object(this)
+			if this.target and get_range(this, this.target) > this.target_radius then
 				this.target = nil
 			end
-		end
 	end,
 	draw=function(this)
 		spr(this.spr,this.x,this.y,1,1)
@@ -141,6 +140,7 @@ eye_type = {
 		this.spr = this.tile
 		this.anim_frame = 1
 		this.anim_rate = 16
+		this.threat = 1
 	end,
 	update=function(this)
 		this.anim_frame += 1
@@ -151,9 +151,19 @@ eye_type = {
 	end,
 	draw=function(this)
 		spr(this.spr,this.x,this.y,1,1)
-		if this.target ~= nil then
-			spr(20, this.target.x, this.target.y)
-		end
+	end
+}
+
+door_type = {
+	init=function(this)
+		this.tile = 3
+		this.hitbox={x=0,y=0,w=8,h=8}
+		this.spr = this.tile
+	end,
+	update=function(this)
+	end,
+	draw=function(this)
+		spr(this.spr,this.x,this.y,1,1)
 	end
 }
 
@@ -170,8 +180,9 @@ function init_object(type,x,y)
 	obj.x = x
 	obj.y = y
 	obj.hitbox = {x=0,y=0,w=8,h=8}
-	obj.spd=1
+	obj.spd= 1
 	obj.moves = {}
+	obj.threat = 0
 
 	obj.collide=function(type,ox,oy)
 		local other
@@ -249,20 +260,26 @@ function move_object(obj)
 	end
 end
 
-function find_target_object(obj, priority_types)
+function find_target_object(obj)
 	local other = nil
 	local range = 0
+	local target = {obj = nil, range = 0}
 	for i=1,count(objects) do
 		other = objects[i]
-		-- TODO: prioritize enemy over doors
 		if obj ~= other then
 			range = get_range(obj, other)
 			if range <= obj.target_radius then
-				obj.target = other
+				if target.obj == nil or
+				(target.obj.threat < other.threat or
+					(target.obj.threat == other.threat and target.range > range)
+				) then
+					target.obj = other
+					target.range = range
+				end
 			end
-			return
 		end
 	end
+	obj.target = target.obj
 end
 
 -- drawing --
@@ -325,6 +342,16 @@ end
 
 function get_range(obj, other)
 	return sqrt(((other.x + 4) - (obj.x + 4))^2 + ((other.y + 4) - (obj.y + 4))^2)
+end
+
+function index_of(tbl, value)
+	for i=1,#tbl do
+		if tbl[i] == value then
+			return i
+		end
+	end
+
+	return 0
 end
 __gfx__
 00000000555555556666666644444444111111119999999900000000000000000000000000000000000000000000000000000000000000006666666669a99a96
