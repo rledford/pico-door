@@ -87,6 +87,7 @@ player_type = {
 		this.target=nil
 		this.target_radius=40 -- distance in pixels for auto-targeting objects
 		this.spr = this.tile
+		this.face = {x=1,y=0}
 	end,
 	update=function(this)
 		if is_room_transition then
@@ -95,32 +96,74 @@ player_type = {
 		local dx = 0
 		local dy = 0
 		if btnp(k_left) then
-			dx = -8
+			dx = -1
 		elseif btnp(k_right) then
-			dx = 8
+			dx = 1
 		elseif btnp(k_up) then
-			dy = -8
+			dy = -1
 		elseif btnp(k_down) then
-			dy = 8
+			dy = 1
 		end
 		if dx ~= 0 or dy ~= 0 then
 			local from = count(this.moves) and this.moves[#this.moves] or {x=this.x,y=this.y}
-			dx += from.x
-			dy += from.y
-			if this.can_move_to(dx/8, dy/8) then
-				add(this.moves, {x=dx,y=dy})
+			this.face.x = dx
+			this.face.y = dy
+			local mx = dx * 8 + from.x
+			local my = dy * 8 + from.y
+			if this.can_move_to(mx/8, my/8) then
+				add(this.moves, {x=mx,y=my})
 			end
 		end
-			find_target_object(this)
-			if this.target and get_range(this, this.target) > this.target_radius then
-				this.target = nil
+		find_target_object(this)
+		if this.target and get_range(this, this.target) > this.target_radius then
+			this.target = nil
+		end
+		if btnp(k_shoot) then
+			local proj = init_object(projectile_type, this.x, this.y)
+			if this.target ~= nil then
+				proj.direction = get_direction({x=this.x, y=this.y}, {x=this.target.x, y=this.target.y})
+			else
+				proj.direction = get_direction({x=this.x, y=this.y}, {x=this.x+this.face.x, y=this.y+this.face.y})
 			end
+
+		end
 	end,
 	draw=function(this)
 		spr(this.spr,this.x,this.y,1,1)
 		if this.target ~= nil then
 			spr(20, this.target.x, this.target.y)
 		end
+	end
+}
+
+projectile_type = {
+	init=function(this)
+		this.tile = 30
+		this.targetable = false
+		this.target=nil -- TODO: implement homing
+		this.spr = this.tile
+		this.anim_frame = 1
+		this.anim_rate = 8
+		this.threat = -1
+		this.spd = 1.25
+		this.direction = {x=0, y=0}
+		this.lifetime = 120
+	end,
+	update=function(this)
+		this.anim_frame += 1
+		this.lifetime -= 1
+		if this.anim_frame > this.anim_rate then
+			this.anim_frame = 1
+			this.spr = this.spr == 30 and 31 or 30
+		end
+		this.x += this.direction.x * this.spd
+		this.y += this.direction.y * this.spd
+		if this.lifetime <= 0 then
+			destroy_object(this)
+		end
+	end,
+	draw=function(this)
+		spr(this.spr,this.x,this.y,1,1)
 	end
 }
 
@@ -174,13 +217,13 @@ function init_object(type,x,y)
 	local obj = {}
 	obj.type = type
 	obj.collideable = true
-	obj.interactive = true
+	obj.targetable = true
 	obj.spr = type.tile
 	obj.flip = {x=false,y=false}
 	obj.x = x
 	obj.y = y
 	obj.hitbox = {x=0,y=0,w=8,h=8}
-	obj.spd= 1
+	obj.spd = 1
 	obj.moves = {}
 	obj.threat = 0
 
@@ -266,7 +309,7 @@ function find_target_object(obj)
 	local target = {obj = nil, range = 0}
 	for i=1,count(objects) do
 		other = objects[i]
-		if obj ~= other then
+		if obj ~= other and other.targetable then
 			range = get_range(obj, other)
 			if range <= obj.target_radius then
 				if target.obj == nil or
@@ -353,6 +396,13 @@ function index_of(tbl, value)
 
 	return 0
 end
+
+function get_direction(pos,dest)
+	local dx = dest.x - pos.x
+	local dy = dest.y - pos.y
+	local norm = sqrt(dx^2 + dy^2)
+	return {x=dx/norm, y=dy/norm}
+end
 __gfx__
 00000000555555556666666644444444111111119999999900000000000000000000000000000000000000000000000000000000000000006666666669a99a96
 00000000555555556666666644444444111111119aaaaaa900000000000000000000000000000000000000000000000000000000000000006444444664944946
@@ -364,10 +414,10 @@ __gfx__
 00000000555555556666666644444444111111119999999900000000000000000000000000000000000000000000000000000000000000004444444444444444
 66666666667666766666666655555555880000880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 66666666667766776666666655155155800000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66556655665566556655556655555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666666666666656656651555515000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666676667666656656651555515000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666677667766655556655555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+6655665566556655665555665555555500000000000000000000000000000000000000000000000000000000000000000000000000000000000d00000000d000
+666666666666666666566566515555150000000000000000000000000000000000000000000000000000000000000000000000000000000000011d0000d11000
+666666666766676666566566515555150000000000000000000000000000000000000000000000000000000000000000000000000000000000d1100000011d00
+66666666677667766655556655555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000d000000d0000
 65566556655665566666666655155155800000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 66666666666666666666666655555555880000880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00333000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
