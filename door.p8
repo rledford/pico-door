@@ -56,7 +56,7 @@ function _draw()
 			local range = get_range(player, player.target)
 			circ(player.x + 4, player.y + 4, range)
 		else
-			circ(player.x + 4, player.y + 4, player.target_radius, 0)
+			circ(player.x + 4, player.y + 4, player.auto_target_radius, 0)
 		end
 	end
 end
@@ -79,13 +79,11 @@ end
 player_type = {
 	init=function(this)
 		this.tile = 32
-		this.fire_rate=20 -- shoot every {fire_rate} ticks
-		this.fire_ticks=0
-		this.reload_rate=30 -- reload in {reloat_rate} ticks
-		this.reload_ticks=0
+		this.fire_rate = 15 -- shoot every {fire_rate} ticks
+		this.fire_timer = 0
 		this.hitbox={x=1,y=2,w=4,h=4}
 		this.target=nil
-		this.target_radius=40 -- distance in pixels for auto-targeting objects
+		this.auto_target_radius = 40
 		this.spr = this.tile
 		this.face = {x=1,y=0}
 	end,
@@ -115,18 +113,19 @@ player_type = {
 			end
 		end
 		find_target_object(this)
-		if this.target and get_range(this, this.target) > this.target_radius then
+		if this.target and get_range(this, this.target) > this.auto_target_radius then
 			this.target = nil
 		end
-		if btnp(k_shoot) then
+		if btn(k_shoot) and this.fire_timer <= 0 then
+			this.fire_timer = this.fire_rate
 			local proj = init_object(projectile_type, this.x, this.y)
 			if this.target ~= nil then
 				proj.direction = get_direction({x=this.x, y=this.y}, {x=this.target.x, y=this.target.y})
 			else
 				proj.direction = get_direction({x=this.x, y=this.y}, {x=this.x+this.face.x, y=this.y+this.face.y})
 			end
-
 		end
+		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
 	end,
 	draw=function(this)
 		spr(this.spr,this.x,this.y,1,1)
@@ -174,12 +173,12 @@ eye_type = {
 	init=function(this)
 		this.tile = 48
 		this.fire_rate=20 -- shoot every {fire_rate} ticks
-		this.fire_ticks=0
+		this.fire_timer=0
 		this.reload_rate=30 -- reload in {reloat_rate} ticks
 		this.reload_ticks=0
 		this.hitbox={x=1,y=3,w=5,h=4}
 		this.target=nil
-		this.target_radius=32 -- distance in pixels for auto-targeting objects
+		this.auto_target_radius=32 -- distance in pixels for auto-targeting objects
 		this.spr = this.tile
 		this.anim_frame = 1
 		this.anim_rate = 16
@@ -311,7 +310,7 @@ function find_target_object(obj)
 		other = objects[i]
 		if obj ~= other and other.targetable then
 			range = get_range(obj, other)
-			if range <= obj.target_radius then
+			if range <= obj.auto_target_radius then
 				if target.obj == nil or
 				(target.obj.threat < other.threat or
 					(target.obj.threat == other.threat and target.range > range)
@@ -378,6 +377,16 @@ end
 
 -- utils --
 -----------
+
+function clamp(value, min, max)
+	if value < min then
+		return min
+	elseif value > max then
+		return max
+	else
+		return value
+	end
+end
 
 function sign(v)
 	return v > 0 and 1 or -1
