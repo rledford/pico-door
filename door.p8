@@ -16,6 +16,7 @@ __lua__
 -- [] persist which doors have been destroyed
 -- [] make destroyed doors not respawn when reentering room
 -- [] despawn enemies when switching rooms
+-- [] animate enemy spawning in (flashing vertial white lines)
 
 -- constants --
 ---------------
