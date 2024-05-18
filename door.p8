@@ -12,7 +12,7 @@ __lua__
 -- [] create reusable animation controller
 -- [] create projectile templates
 -- [] use make_projectile with templates
--- [] implement spawning enemies from room definitions
+-- [] implement spawning enemies from room definitions via spawn points
 -- [] persist which doors have been destroyed
 -- [] make destroyed doors not respawn when reentering room
 -- [] despawn enemies when switching rooms
