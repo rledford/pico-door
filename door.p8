@@ -3,6 +3,15 @@ version 42
 __lua__
 -- main
 
+-- constants --
+---------------
+TILE_W = 8
+TILE_H = 8
+TILE_HALF_W = TILE_W/2
+TILE_HALF_H = TILE_H/2
+SCREEN_W = 128
+SCREEN_H = 128
+
 -- globals --
 -------------
 
@@ -88,9 +97,6 @@ player_type = {
 		this.face = {x=1,y=0}
 	end,
 	update=function(this)
-		if is_room_transition then
-			return
-		end
 		local dx = 0
 		local dy = 0
 		if btnp(k_left) then
@@ -106,10 +112,13 @@ player_type = {
 			local from = count(this.moves) and this.moves[#this.moves] or {x=this.x,y=this.y}
 			this.face.x = dx
 			this.face.y = dy
-			local mx = dx * 8 + from.x
-			local my = dy * 8 + from.y
-			if this.can_move_to(mx/8, my/8) then
+			local mx = dx * TILE_W + from.x
+			local my = dy * TILE_H + from.y
+			if this.can_move_to(mx/TILE_W, my/TILE_H) then
 				add(this.moves, {x=mx,y=my})
+				if is_move_to_next_room(mx,my) then
+					start_room_transition(room.x + dx, room.y + dy)
+				end
 			end
 		end
 		find_target_object(this)
@@ -159,6 +168,7 @@ projectile_type = {
 		this.y += this.direction.y * this.spd
 		if this.lifetime <= 0 then
 			destroy_object(this)
+			return
 		end
 	end,
 	draw=function(this)
@@ -199,7 +209,6 @@ eye_type = {
 door_type = {
 	init=function(this)
 		this.tile = 3
-		this.hitbox={x=0,y=0,w=8,h=8}
 		this.spr = this.tile
 	end,
 	update=function(this)
@@ -221,7 +230,7 @@ function init_object(type,x,y)
 	obj.flip = {x=false,y=false}
 	obj.x = x
 	obj.y = y
-	obj.hitbox = {x=0,y=0,w=8,h=8}
+	obj.hitbox = {x=0,y=0,w=TILE_W,h=TILE_H}
 	obj.spd = 1
 	obj.moves = {}
 	obj.threat = 0
@@ -251,27 +260,14 @@ function init_object(type,x,y)
 		local dest = obj.moves[1]
 		if obj.x ~= dest.x then
 			local sign = obj.x - dest.x > 0 and -1 or 1
-			obj.x += sign * 1
+			obj.x += sign
 		end
 		if obj.y ~= dest.y then
 			local sign = obj.y - dest.y > 0 and -1 or 1
-			obj.y += sign * 1
+			obj.y += sign
 		end
 		if obj.x == dest.x and obj.y == dest.y then
 			del(obj.moves, dest)
-		end
-
-		-- TODO: try not to depend on is_room_transition
-		if type == player_type and not is_room_transition then
-			if obj.x + 4 > room.x * 128 + 128 then
-				start_room_transition(room.x + 1, room.y)
-			elseif obj.x + 4 < room.x * 128 then
-				start_room_transition(room.x - 1, room.y)
-			elseif obj.y + 4 > room.y * 128 + 128 then
-				start_room_transition(room.x, room.y + 1)
-			elseif obj.y + 4 < room.y * 128 then
-				start_room_transition(room.x, room.y - 1)
-			end
 		end
 	end
 
@@ -353,8 +349,8 @@ end
 
 function update_room_transition()
 	player.move()
-	local diffx = room.x * 8 * 16 - camera_pos.x
-	local diffy = room.y * 8 * 16 - camera_pos.y
+	local diffx = room.x * SCREEN_W - camera_pos.x
+	local diffy = room.y * SCREEN_H - camera_pos.y
 
 	if diffx ~= 0 then
 		camera_pos.x += camera_spd * sign(diffx)
@@ -378,6 +374,13 @@ end
 -- utils --
 -----------
 
+function is_move_to_next_room(x,y)
+	return x > room.x * SCREEN_W + SCREEN_W - 1 or
+		x < room.x * SCREEN_W or
+		y > room.y * SCREEN_H + SCREEN_H - 1 or
+		y < room.y * SCREEN_H
+end
+
 function clamp(value, min, max)
 	if value < min then
 		return min
@@ -393,7 +396,9 @@ function sign(v)
 end
 
 function get_range(obj, other)
-	return sqrt(((other.x + 4) - (obj.x + 4))^2 + ((other.y + 4) - (obj.y + 4))^2)
+	return sqrt(
+		((other.x + TILE_HALF_W) - (obj.x + TILE_HALF_W))^2 + ((other.y + TILE_HALF_H) - (obj.y + TILE_HALF_H))^2
+	)
 end
 
 function index_of(tbl, value)
