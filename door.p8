@@ -486,14 +486,7 @@ function make_animation(frames, frame_time)
 		frame_timer = frame_time or 0
 	}
 
-	anim.set_frames = function(frames)
-		anim.frames = frames
-	end
-
-	anim.set_frametime = function(v)
-		anim.frame_time = v
-		anim.frame_timer = v
-	end
+	anim.current_frame = ceil(rnd(count(anim.frames)))
 
 	anim.update = function()
 		anim.frame_timer -= 1
