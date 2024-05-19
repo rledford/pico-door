@@ -14,7 +14,7 @@ __lua__
 -- [x] enemies move toward player when close enough
 -- [x] add spawning points
 -- [x] when player takes damage, do flash animation and make temporarily invulnerable (and not collidable)
--- [] player takes damage when touching enemies
+-- [x] player takes damage when touching enemies
 -- [] add max objects and prevent spawning more enemies when max is reached
 -- [] persist which doors have been destroyed
 -- [] make destroyed doors not respawn when reentering room
@@ -188,6 +188,11 @@ player_type = {
 			add(proj.collision_groups, ENEMY_GROUP)
 		end
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
+		foreach(objects, function(obj)
+			if this.collides_with(obj) and obj.touch_damage > 0 then
+				this.type.take_damage(this, obj.touch_damage)
+			end
+		end)
 	end
 }
 
@@ -284,6 +289,7 @@ bug_type = {
 		this.hp = 6
 		this.move_rate=15
 		this.move_timer=0
+		this.touch_damage = 10
 	end,
 	update=function(this)
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
@@ -391,20 +397,25 @@ function init_object(type,x,y)
 	obj.hurt_duration = 30
 	obj.hurt_duration_timer = 0
 	obj.hurt_collidable = true
+	obj.touch_damage = 0
 
 	obj.collide=function(groups)
 		local other
 		for i=1,count(objects) do
 			other = objects[i]
-			if other ~= nil and other ~= obj and
-				other.collidable and index_of(groups, other.group) > 0 and
-				other.x+other.hitbox.x+other.hitbox.w > obj.x+obj.hitbox.x and
-				other.y+other.hitbox.y+other.hitbox.h > obj.y+obj.hitbox.y and
-				other.x+other.hitbox.x < obj.x+obj.hitbox.x+obj.hitbox.w and
-				other.y+other.hitbox.y < obj.y+obj.hitbox.y+obj.hitbox.h then
+			if obj.collides_with(other) and index_of(groups, other.group) > 0 then
 				return other
 			end
 		end
+	end
+
+	obj.collides_with=function(other)
+		return other ~= nil and other ~= obj and
+			obj.collidable and other.collidable and
+			other.x+other.hitbox.x+other.hitbox.w > obj.x+obj.hitbox.x and
+			other.y+other.hitbox.y+other.hitbox.h > obj.y+obj.hitbox.y and
+			other.x+other.hitbox.x < obj.x+obj.hitbox.x+obj.hitbox.w and
+			other.y+other.hitbox.y < obj.y+obj.hitbox.y+obj.hitbox.h
 	end
 
 	obj.move=function()
