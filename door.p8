@@ -76,8 +76,11 @@ function _draw()
 	cls()
 	map()
 	foreach(objects,function(obj)
-		draw_object(obj)
+		if obj.type ~= player_type then
+			draw_object(obj)
+		end
 	end)
+	draw_object(player)
 	if player.target ~= nil then
 		spr(20, player.target.x, player.target.y)
 	end
@@ -117,7 +120,7 @@ player_type = {
 		this.target=nil
 		this.auto_target_radius = 40
 		this.face = {x=1,y=0}
-		this.hp = 10000
+		this.hp = 100
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 	end,
@@ -146,7 +149,7 @@ player_type = {
 				end
 			end
 		end
-		this.find_target(ENEMY_GROUP)
+		this.find_target_in_group(ENEMY_GROUP)
 		if this.target and get_range(this, this.target) > this.auto_target_radius then
 			this.target = nil
 		end
@@ -235,9 +238,9 @@ eye_type = {
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
 		if this.move_timer <= 0  and ceil(rnd(100)) == 100 then
 			this.move_timer = this.move_rate
-			add_random_move(this)
+			plan_next_move(this)
 		end
-		this.find_target(PLAYER_GROUP)
+		this.find_player_target()
 		if this.target ~= nil and this.fire_timer <= 0 and ceil(rnd(100)) > 95 then
 			this.fire_timer = this.fire_rate
 			local dir = get_direction({x=this.x, y=this.y}, {x=this.target.x, y=this.target.y})
@@ -264,7 +267,7 @@ bug_type = {
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
 		if this.move_timer <= 0  and ceil(rnd(100)) == 100 then
 			this.move_timer = this.move_rate
-			add_random_move(this)
+			plan_next_move(this)
 		end
 		this.anim.update() 
 	end
@@ -362,7 +365,20 @@ function init_object(type,x,y)
 		end
 	end
 
-	obj.find_target = function(group)
+	obj.find_player_target = function()
+		if player == nil then
+			return
+		end
+		local range = get_range(obj, player)
+		if range > 0 and range <= obj.auto_target_radius then
+			obj.target = player
+		else
+			obj.target = nil
+		end
+	end
+
+
+	obj.find_target_in_group = function(group)
 		local group = group or NO_GROUP
 		local other = nil
 		local range = 0
@@ -427,8 +443,35 @@ function add_random_move(obj)
 	end
 end
 
-function add_move_toward_player(obj)
-	-- least manhattan > 0
+function plan_next_move(obj)
+	if player == nil or count(obj.moves) > 0 then
+		return
+	end
+	local range = get_range(obj, player)
+	if range > obj.auto_target_radius then
+		add_random_move(obj)
+		return
+	elseif range <= TILE_SIZE * 2.5 then
+		return
+	end
+	local m = get_manhattan(obj, player)
+	if (m.x == 0 and m.y == 0) then
+		return
+	end
+	local dx = sign(m.x)
+	local dy = sign(m.y)
+	if dx ~= 0 and dy ~= 0 then
+		if rnd() > 0.5 then
+			dx = 0
+		else
+			dy = 0
+		end
+	end
+	local mx = dx * TILE_SIZE + obj.x
+	local my = dy * TILE_SIZE + obj.y
+	if (obj.can_move_to(mx/TILE_SIZE, my/TILE_SIZE)) then
+		add(obj.moves, {x=mx, y=my})
+	end
 end
 
 -- animation --
