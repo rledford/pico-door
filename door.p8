@@ -12,12 +12,26 @@ __lua__
 -- [x] create reusable animation controller
 -- [x] use make_projectile
 -- [x] enemies move toward player when close enough
--- [] implement spawning enemies from room definitions via spawn points
+-- [x] add spawning points
+-- [] when player takes damage, do flash animation and make temporarily invulnerable (and not collidable)
 -- [] persist which doors have been destroyed
 -- [] make destroyed doors not respawn when reentering room
 -- [] despawn enemies when switching rooms
 -- [] animate enemy spawning in (flashing vertial white lines)
 -- [] add particle effects when destroying objects
+-- [] add pickup items (health, weapon upgrades)
+-- [] add chests that drop pickups
+-- [] persist which chests have been destroyed
+-- [] make destroyed chests not respawn when reentering room
+-- [] add floor spike traps
+-- [] add wall projectile traps activated by floor tiles (hits player and enemies)
+
+-- ideas --
+-----------
+
+-- make enemies drop gold
+-- vendors and/or traveling vendors to sell pickukps
+-- add a skeleton behind a desk who says "hello"
 
 -- constants --
 ---------------
@@ -58,11 +72,11 @@ end
 function _init()
 	cls()
 	player = init_object(player_type, 64, 48)
-	e = init_object(eye_type, 64, 64)
-	for i=1,14 do
-		init_object(eye_type, i * 8, 64)
-		init_object(bug_type, i * 8, 72)
-	end
+	-- for i=1,14 do
+	-- 	init_object(eye_type, i * 8, 64)
+	-- 	init_object(bug_type, i * 8, 72)
+	-- end
+	make_enemy_spawn_point(64,72,{},200)
 	update_fn = game_update
 end
 
@@ -121,7 +135,7 @@ player_type = {
 		this.target=nil
 		this.auto_target_radius = 40
 		this.face = {x=1,y=0}
-		this.hp = 100
+		this.hp = 10000
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 	end,
@@ -217,8 +231,8 @@ function make_projectile(x, y, anim, damage, spd, direction)
 	return proj
 end
 
--- eye --
------------
+-- enemies --
+-------------
 
 eye_type = {
 	init=function(this)
@@ -293,6 +307,59 @@ door_type = {
 	update=function(this)
 	end
 }
+
+-- enemy spawn point --
+-----------------------
+
+enemy_spawn_point_type = {
+	init=function(this)
+		this.enemy_types = {}
+		this.spawn_time = 0
+		this.spawn_timer = 0
+		this.spawn_duration = 60
+		this.spawn_duration_timer = 0
+		this.anim = make_animation({6})
+		this.spawn_anim = make_animation({7,8}, 8)
+		this.is_spawning = false
+	end,
+	update=function(this)
+		if not this.is_spawning then
+			this.spawn_timer = clamp(this.spawn_timer - 1, 0, this.spawn_time)
+			if this.spawn_timer <= 0 then
+				this.is_spawning = true
+				this.spawn_timer = this.spawn_time
+				this.spawn_duration_timer = this.spawn_duration
+			end
+		else
+			this.spawn_duration_timer = clamp(this.spawn_duration_timer - 1, 0, this.spawn_duration_timer)
+			if this.spawn_duration_timer <= 0 then
+				this.is_spawning = false
+				local e = init_object(eye_type, this.x, this.y)
+				plan_next_move(e)
+			end
+		end
+		this.anim.update()
+		if this.is_spawning then
+			this.spawn_anim.update()
+		end
+	end,
+	draw=function(this)
+		this.anim.draw(this.x, this.y)
+		if this.is_spawning then
+			this.spawn_anim.draw(this.x, this.y)
+		end
+	end
+}
+
+function make_enemy_spawn_point(x, y, enemy_types, spawn_time)
+	sp = init_object(enemy_spawn_point_type, x, y)
+	sp.spawn_time = spawn_time
+	sp.spawn_timer = spawn_time
+	for i=1,count(enemy_types) do
+		add(sp.enemy_types, enemy_types[i])
+	end
+	return sp
+end
 
 -- object functions --
 ----------------------
@@ -608,16 +675,16 @@ function get_manhattan(pos,dest)
 	return {x=flr(dest.x-pos.x),y=flr(dest.y-pos.y)}
 end
 __gfx__
-0000000055500555677777764444444411111111aa5555aa67766776000000000000000000000000000000000000000000000000000000006666666669a99a96
-0000000050500505767777674444444411111111a9a55a9a76888867000000000000000000000000000000000000000000000000000000006444444664944946
-00700700550000557767767744444444111111115a5aa5a5788668870000000000000000000000000000000000000000000000000000000049a99a9440000004
-000770000000000077766777444444441111111155aaaa5568677686000000000000000000000000000000000000000000000000000000004494494440000004
-000770000000000077766777444444441111111155aaaa55686776860000000000000000000000000000000000000000000000000000000049a99a9449a99a94
-00700700550000557767767744444444111111115a5aa5a5788668870000000000000000000000000000000000000000000000000000000049a99a9449a99a94
-0000000050500505767777674444444411111111a9a55a9a768888670000000000000000000000000000000000000000000000000000000049a99a9449a99a94
-0000000055500555677777764444444411111111aa5555aa67766776000000000000000000000000000000000000000000000000000000004444444444444444
-66666666667666766666666655555555880000880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-66666666667766776666666655155155800000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000055500555677777764444444411111111aa5555aa67766776090000900900009000000000000000000000000000000000000000006666666669a99a96
+0000000050500505767777674444444411111111a9a55a9a76888867909090099909909900000000000000000000000000000000000000006444444664944946
+00700700550000557767767744444444111111115a5aa5a5788668870000009009000000000000000000000000000000000000000000000049a99a9440000004
+000770000000000077766777444444441111111155aaaa5568677686090900000000909000000000000000000000000000000000000000004494494440000004
+000770000000000077766777444444441111111155aaaa55686776860000909009090000000000000000000000000000000000000000000049a99a9449a99a94
+00700700550000557767767744444444111111115a5aa5a5788668870900000000000090000000000000000000000000000000000000000049a99a9449a99a94
+0000000050500505767777674444444411111111a9a55a9a768888679009090999909099000000000000000000000000000000000000000049a99a9449a99a94
+0000000055500555677777764444444411111111aa5555aa67766776090000900900009000000000000000000000000000000000000000004444444444444444
+66666666667666766666666655555555880000880000000000000000000000007000707000000000000000000000000000000000000000000000000000000000
+66666666667766776666666655155155800000080000000000000000000000007070007000000000000000000000000000000000000000000000000000000000
 6655665566556655665555665555555500000000000000000000000000000000000000000000000000000000000000000000000000000000000d00000000d000
 666666666666666666566566515555150000000000000000000000000000000000000000000000000000000000000000000000000000000000011d0000d11000
 666666666766676666566566515555150000000000000000000000000000000000000000000000000000000000000000000000000000000000d1100000011d00
