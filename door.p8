@@ -15,7 +15,7 @@ __lua__
 -- [x] add spawning points
 -- [x] when player takes damage, do flash animation and make temporarily invulnerable (and not collidable)
 -- [x] player takes damage when touching enemies
--- [] add max objects and prevent spawning more enemies when max is reached
+-- [x] add max objects and prevent spawning more enemies when max is reached
 -- [] persist which doors have been destroyed
 -- [] make destroyed doors not respawn when reentering room
 -- [] despawn enemies when switching rooms
@@ -41,6 +41,7 @@ __lua__
 TILE_SIZE = 8
 TILE_HALF_SIZE = TILE_SIZE/2
 SCREEN_SIZE = 128
+MAX_OBJECTS = 32
 
 NO_GROUP = 0
 PLAYER_GROUP = 1
@@ -75,7 +76,10 @@ end
 function _init()
 	cls()
 	player = init_object(player_type, 64, 48)
+	make_enemy_spawn_point(48,72,{eye_type, bug_type},50)
+	make_enemy_spawn_point(56,72,{eye_type, bug_type},50)
 	make_enemy_spawn_point(64,72,{eye_type, bug_type},50)
+	make_enemy_spawn_point(72,72,{eye_type, bug_type},50)
 	update_fn = game_update
 end
 
@@ -101,9 +105,10 @@ function _draw()
 	if debug then
 		print("player x: "..player.x, camera_pos.x + 1, camera_pos.y + 1, 8)
 		print("player y: "..player.y, camera_pos.x + 1, camera_pos.y + 1 + 8, 8)
+		print("objects: "..count(objects), camera_pos.x + 1, camera_pos.y + 1 + 16, 8)
 		if player.target ~= nil then
 			local range = get_range(player, player.target)
-			print("target rng: "..flr(range), camera_pos.x + 1, camera_pos.y + 1 + 16, 8)
+			print("target rng: "..flr(range), camera_pos.x + 1, camera_pos.y + 1 + 24, 8)
 			circ(player.x + 4, player.y + 4, range)
 		else
 			circ(player.x + 4, player.y + 4, player.auto_target_radius, 8)
@@ -338,7 +343,7 @@ enemy_spawn_point_type = {
 	update=function(this)
 		if not this.is_spawning then
 			this.spawn_timer = clamp(this.spawn_timer - 1, 0, this.spawn_time)
-			if this.spawn_timer <= 0 then
+			if this.spawn_timer <= 0 and count(objects) < MAX_OBJECTS then
 				this.is_spawning = true
 				this.spawn_timer = this.spawn_time
 				this.spawn_duration_timer = this.spawn_duration
@@ -557,8 +562,8 @@ function plan_next_move(obj)
 	if range > obj.auto_target_radius then
 		add_random_move(obj)
 		return
-	elseif range <= TILE_SIZE * 1.5 then
-		return
+	-- elseif range <= TILE_SIZE * 1.5 then
+	-- 	return
 	end
 	local m = get_manhattan(obj, player)
 	if (m.x == 0 and m.y == 0) then
