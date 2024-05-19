@@ -85,8 +85,8 @@ function _draw()
 		print("player x: "..player.x, camera_pos.x + 1, camera_pos.y + 1, 8)
 		print("player y: "..player.y, camera_pos.x + 1, camera_pos.y + 1 + 8, 8)
 		if player.target ~= nil then
-			print("target rng: "..flr(get_range(player, player.target)), camera_pos.x + 1, camera_pos.y + 1 + 16, 8)
 			local range = get_range(player, player.target)
+			print("target rng: "..flr(range), camera_pos.x + 1, camera_pos.y + 1 + 16, 8)
 			circ(player.x + 4, player.y + 4, range)
 		else
 			circ(player.x + 4, player.y + 4, player.auto_target_radius, 8)
