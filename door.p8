@@ -13,7 +13,9 @@ __lua__
 -- [x] use make_projectile
 -- [x] enemies move toward player when close enough
 -- [x] add spawning points
--- [] when player takes damage, do flash animation and make temporarily invulnerable (and not collidable)
+-- [x] when player takes damage, do flash animation and make temporarily invulnerable (and not collidable)
+-- [] player takes damage when touching enemies
+-- [] add max objects and prevent spawning more enemies when max is reached
 -- [] persist which doors have been destroyed
 -- [] make destroyed doors not respawn when reentering room
 -- [] despawn enemies when switching rooms
@@ -62,6 +64,7 @@ k_shoot = 4
 k_action = 5
 is_room_transition = false
 debug=false
+hurt_flash_pal = {8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8}
 
 update_fn = function()
 end
@@ -72,11 +75,7 @@ end
 function _init()
 	cls()
 	player = init_object(player_type, 64, 48)
-	-- for i=1,14 do
-	-- 	init_object(eye_type, i * 8, 64)
-	-- 	init_object(bug_type, i * 8, 72)
-	-- end
-	make_enemy_spawn_point(64,72,{},200)
+	make_enemy_spawn_point(64,72,{eye_type, bug_type},50)
 	update_fn = game_update
 end
 
@@ -120,6 +119,9 @@ function game_update()
 		if obj.type.update~=nil then
 			obj.type.update(obj)
 		end
+		if obj.is_hurt then
+			update_hurt_object(obj)
+		end
 		obj.move()
 	end)
 end
@@ -138,6 +140,11 @@ player_type = {
 		this.hp = 10000
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
+		this.hurt_collidable = false
+	end,
+	take_damage=function(this, amt)
+		this.hp -= amt
+		start_hurt_object(this)
 	end,
 	update=function(this)
 		local dx = 0
@@ -334,7 +341,7 @@ enemy_spawn_point_type = {
 			this.spawn_duration_timer = clamp(this.spawn_duration_timer - 1, 0, this.spawn_duration_timer)
 			if this.spawn_duration_timer <= 0 then
 				this.is_spawning = false
-				local e = init_object(eye_type, this.x, this.y)
+				local e = init_object(rnd(this.enemy_types), this.x, this.y)
 				plan_next_move(e)
 			end
 		end
@@ -344,9 +351,9 @@ enemy_spawn_point_type = {
 		end
 	end,
 	draw=function(this)
-		this.anim.draw(this.x, this.y)
+		this.anim.draw(this)
 		if this.is_spawning then
-			this.spawn_anim.draw(this.x, this.y)
+			this.spawn_anim.draw(this)
 		end
 	end
 }
@@ -380,6 +387,10 @@ function init_object(type,x,y)
 	obj.hp = 1
 	obj.msg = "none"
 	obj.anim = nil
+	obj.is_hurt = false
+	obj.hurt_duration = 30
+	obj.hurt_duration_timer = 0
+	obj.hurt_collidable = true
 
 	obj.collide=function(groups)
 		local other
@@ -429,7 +440,9 @@ function init_object(type,x,y)
 			obj.hp -= amount
 			if obj.hp <= 0 then
 				destroy_object(obj)
+				return
 			end
+			start_hurt_object(obj)
 		end
 	end
 
@@ -488,6 +501,20 @@ function move_object(obj)
 	end
 end
 
+function start_hurt_object(obj)
+	obj.is_hurt = true
+	obj.hurt_duration_timer = obj.hurt_duration
+	obj.collidable = obj.hurt_collidable
+end
+
+function update_hurt_object(obj)
+	obj.hurt_duration_timer -= 1
+	if obj.hurt_duration_timer <= 0 then
+		obj.is_hurt = false
+		obj.collidable = true
+	end
+end
+
 function add_random_move(obj)
 	if count(obj.moves) ~= 0 then
 		return
@@ -519,7 +546,7 @@ function plan_next_move(obj)
 	if range > obj.auto_target_radius then
 		add_random_move(obj)
 		return
-	elseif range <= TILE_SIZE * 2.5 then
+	elseif range <= TILE_SIZE * 1.5 then
 		return
 	end
 	local m = get_manhattan(obj, player)
@@ -566,8 +593,12 @@ function make_animation(frames, frame_time)
 		end
 	end
 
-	anim.draw = function(x, y)
-		spr(anim.frames[anim.current_frame], x, y)
+	anim.draw = function(obj)
+		if obj.is_hurt and (obj.hurt_duration_timer%2 == 0) then
+			pal(hurt_flash_pal)
+		end
+		spr(anim.frames[anim.current_frame], obj.x, obj.y)
+		pal()
 	end
 
 	return anim
@@ -579,7 +610,7 @@ function draw_object(obj)
 	if obj.type.draw ~= nil then
 		obj.type.draw(obj)
 	elseif obj.anim ~= nil then
-		obj.anim.draw(obj.x, obj.y)
+		obj.anim.draw(obj)
 	end
 	if debug then
 		rect(obj.x+obj.hitbox.x,obj.y+obj.hitbox.y,obj.x+obj.hitbox.x+obj.hitbox.w-1,obj.y+obj.hitbox.y+obj.hitbox.h-1,8)
