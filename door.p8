@@ -21,7 +21,7 @@ __lua__
 -- [x] make destroyed doors not respawn when reentering room
 -- [x] despawn enemies when switching rooms
 -- [x] animate enemy spawning in
--- [] add particle effects when destroying objects
+-- [x] add particle effects when destroying objects
 -- [] add pickup items (health, weapon upgrades)
 -- [] add chests that drop pickups
 -- [] persist which chests have been destroyed
@@ -124,6 +124,7 @@ function _draw()
 	if player.target ~= nil then
 		spr(20, player.target.x, player.target.y)
 	end
+	draw_particles()
 	if debug then
 		print("mem kb: "..stat(0),  camera_pos.x + 1, camera_pos.y + 1 + 8, 8)
 		print("player x: "..player.x, camera_pos.x + 1, camera_pos.y + 1 + 16, 8)
@@ -153,6 +154,7 @@ function game_update()
 		end
 		obj.move()
 	end)
+	updat_particles()
 end
 
 -- player --
@@ -287,7 +289,7 @@ eye_type = {
 		this.auto_target_radius=40
 		this.threat = 1
 		this.group = ENEMY_GROUP
-		this.hp = 3
+		this.hp = 1
 		this.move_rate=30
 		this.move_timer=0
 		this.anim = make_animation({48,49}, 16)
@@ -318,7 +320,7 @@ bug_type = {
 		this.anim = make_animation({50,51}, 25)
 		this.threat = 1
 		this.group = ENEMY_GROUP
-		this.hp = 6
+		this.hp = 1
 		this.move_rate=15
 		this.move_timer=0
 		this.touch_damage = 10
@@ -341,7 +343,7 @@ fang_type = {
 		this.anim = make_animation({53,54}, 40)
 		this.threat = 1
 		this.group = ENEMY_GROUP
-		this.hp = 10
+		this.hp = 1
 		this.move_rate=5
 		this.move_timer=0
 		this.touch_damage = 15
@@ -359,7 +361,7 @@ fang_type = {
 door_type = {
 	init=function(this)
 		this.group = ENEMY_GROUP
-		this.hp = 10
+		this.hp = 1
 		this.anim = make_animation({3})
 	end,
 	take_damage=function(this, amount)
@@ -368,6 +370,7 @@ door_type = {
 			--play destroy sound
 			--spawn particles
 			mset(this.x/TILE_SIZE,this.y/TILE_SIZE, FLOOR_TILE)
+			make_particle_group(this.x, this.y)
 			destroy_object(this)
 		else
 			-- play hit sound
@@ -507,6 +510,7 @@ function init_object(type,x,y)
 		else
 			obj.hp -= amount
 			if obj.hp <= 0 then
+				make_particle_group(obj.x,obj.y)
 				destroy_object(obj)
 				return
 			end
@@ -672,6 +676,66 @@ function make_animation(frames, frame_time)
 	return anim
 end
 
+-- particles --
+---------------
+
+particles = {}
+particle_pool = {}
+function make_particle_group(x,y)
+	local pgroup
+
+	if count(particle_pool) > 0 then
+		pgroup = particle_pool[1]
+		del(particle_pool, pgroup)
+
+		pgroup.init(x,y)
+		add(particles, pgroup)
+
+		return
+	end
+	
+	pgroup = {
+		lifetime = 0,
+		particles={}
+	}
+
+	for i=1,20 do
+		add(pgroup.particles, {x=0,y=0,spd=1,dir={x=1,y=0},color=8})
+	end
+
+	pgroup.init = function(x, y)
+		pgroup.lifetime = 60
+		foreach(pgroup.particles, function(p)
+			p.x = x
+			p.y = y
+			p.spd = 0.5
+			p.dir.x = rnd() * (rnd() >= 0.5 and -1 or 1)
+			p.dir.y = rnd() * (rnd() >= 0.5 and -1 or 1)
+			p.color = rnd(flr(15)+1)
+		end)
+	end
+
+	pgroup.init(x,y)
+	add(particles, pgroup)
+end
+
+updat_particles = function()
+	local pgroup
+	for i=count(particles),1,-1 do
+		pgroup = particles[i]
+		pgroup.lifetime -= 1
+		if pgroup.lifetime > 0 then
+			for p in all(pgroup.particles) do
+				p.x += p.dir.x * p.spd
+				p.y += p.dir.y * p.spd
+			end
+		else
+			del(particles, pgroup)
+			add(particle_pool, pgroup)
+		end
+	end
+end
+
 -- drawing --
 -------------
 function draw_object(obj)
@@ -682,6 +746,14 @@ function draw_object(obj)
 	end
 	if debug then
 		rect(obj.x+obj.hitbox.x,obj.y+obj.hitbox.y,obj.x+obj.hitbox.x+obj.hitbox.w-1,obj.y+obj.hitbox.y+obj.hitbox.h-1,8)
+	end
+end
+
+function draw_particles()
+	for group in all(particles) do
+		for p in all(group.particles) do
+			pset(p.x, p.y, p.color)
+		end
 	end
 end
 
