@@ -22,12 +22,19 @@ __lua__
 -- [x] despawn enemies when switching rooms
 -- [x] animate enemy spawning in
 -- [x] add particle effects when destroying objects
--- [] add pickup items (health, weapon upgrades)
--- [] add chests that drop pickups
+-- [] add xp drops
+-- [] add levelup
+-- [] add window
+-- [] make window interactive
+-- [] show window on levelup
+-- [] add upgrade choices to levelup window
+-- [] apply selected upgrade to player and close levelup window
 -- [] persist which chests have been destroyed
 -- [] make destroyed chests not respawn when reentering room
 -- [] add floor spike traps
 -- [] add wall projectile traps activated by floor tiles (hits player and enemies)
+-- [] tune enemy movement and damage
+-- [] make enemy spawn points configurable or pull from different type pools based on conditions
 
 -- ideas --
 -----------
@@ -167,11 +174,15 @@ player_type = {
 		this.hitbox={x=2,y=2,w=3,h=4}
 		this.target=nil
 		this.auto_target_radius = 40
+		this.projectile_dmg = 1
 		this.face = {x=1,y=0}
 		this.hp = 10000
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
+		this.level = 1
+		this.xp = 0
+		this.max_xp = 10
 	end,
 	take_damage=function(this, amt)
 		this.hp -= amt
@@ -218,17 +229,52 @@ player_type = {
 			if dir.x == 0 and dir.y == 0 then
 				dir.y = 1
 			end
-			local proj = make_projectile(this.x, this.y, make_animation({30,31}, 8), 1, 1.25, dir)
+			local proj = make_projectile(this.x, this.y, make_animation({30,31}, 8), this.projectile_dmg, 1.25, dir)
 			add(proj.collision_groups, ENEMY_GROUP)
 		end
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
 		foreach(objects, function(obj)
-			if this.collides_with(obj) and obj.touch_damage > 0 then
-				this.type.take_damage(this, obj.touch_damage)
+			if this.collides_with(obj) then
+				if obj.touch_damage > 0 then
+					this.type.take_damage(this, obj.touch_damage)
+				elseif obj.on_pickup ~= nil then
+					obj.on_pickup(this)
+				end
 			end
 		end)
 	end
 }
+
+-- pickups --
+-------------
+
+pickup_type = {
+	init=function(this)
+	end,
+	update=function(this)
+		local dir = get_direction(this, player)
+		this.x += dir.x * 0.25
+		this.y += dir.y * 0.25
+		this.anim.update()
+	end
+}
+
+function make_pickup(x, y, anim)
+	local pickup = init_object(pickup_type, x, y)
+	pickup.anim = anim
+	return pickup
+end
+
+function make_xp_pickkup(x, y, amount)
+	local pickup = make_pickup(x, y, make_animation({28,29}, 10))
+	local on_pickup = function(player)
+		player.xp += amount
+		destroy_object(pickup)
+	end
+	pickup.hitbox={x=2,y=2,w=3,h=3}
+	pickup.on_pickup = on_pickup
+	return pickup
+end
 
 -- projectiles --
 -----------------
@@ -544,6 +590,11 @@ function init_object(type,x,y)
 			if obj.hp <= 0 then
 				make_particle_group(obj.x,obj.y)
 				destroy_object(obj)
+				-- instead check if obj has on_destroy
+				-- which should handle spawning pickups
+				if obj.type ~= player_type then
+					make_xp_pickkup(obj.x,obj.y,1)
+				end
 				return
 			end
 			start_hurt_object(obj)
@@ -916,9 +967,9 @@ __gfx__
 0000000055500555677777764444444411111111aa5555aa67766776090000900900009000000000000000000000000000000000000000004444444444444444
 66666666667666766666666655555555880000880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 66666666667766776666666655155155800000080000000000000000000000000000000000000000000000000000000000000000000000000011d00000011100
-66556655665566556655556655555555000000000000000000000000000000000000000000000000000000000000000000000000000000000010011001d00d00
-66666666666666666656656651555515000000000000000000000000000000000000000000000000000000000000000000000000000000000d0d10100101d010
-66666666676667666656656651555515000000000000000000000000000000000000000000000000000000000000000000000000000000000101d0d0010d1010
+6655665566556655665555665555555500000000000000000000000000000000000000000000000000000000000000000000b000000030000010011001d00d00
+666666666666666666566566515555150000000000000000000000000000000000000000000000000000000000000000000b3b000003b3000d0d10100101d010
+6666666667666766665665665155551500000000000000000000000000000000000000000000000000000000000000000000b000000030000101d0d0010d1010
 66666666677667766655556655555555000000000000000000000000000000000000000000000000000000000000000000000000000000000110010000d00d10
 6556655665566556666666665515515580000008000000000000000000000000000000000000000000000000000000000000000000000000000d110000111000
 66666666666666666666666655555555880000880000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
