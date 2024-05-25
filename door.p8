@@ -25,6 +25,7 @@ __lua__
 -- [x] add xp drops
 -- [x] make destoyed enemy particles match enemy colors
 -- [x] add floor spike traps
+-- [x] make doors do hurt-flash
 -- [] add wall projectile traps activated by floor tiles (hits player and enemies)
 -- [] add health pickup
 -- [] enemies have low chance to drop health pickup
@@ -448,11 +449,12 @@ skull_type = {
 door_type = {
 	init=function(this)
 		this.group = ENEMY_GROUP
-		this.hp = 1
+		this.hp = 15
 		this.anim = make_animation({3})
 	end,
 	take_damage=function(this, amount)
 		this.hp -= amount
+		start_hurt_object(this)
 		if this.hp <= 0 then
 			--play destroy sound
 			mset(this.x/TILE_SIZE,this.y/TILE_SIZE, FLOOR_TILE)
