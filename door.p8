@@ -22,7 +22,8 @@ __lua__
 -- [x] despawn enemies when switching rooms
 -- [x] animate enemy spawning in
 -- [x] add particle effects when destroying objects
--- [] add xp drops
+-- [x] add xp drops
+-- [x] make destoyed enemy particles match enemy colors
 -- [] add levelup
 -- [] add window
 -- [] make window interactive
@@ -174,6 +175,7 @@ player_type = {
 		this.hitbox={x=2,y=2,w=3,h=4}
 		this.target=nil
 		this.auto_target_radius = 40
+		this.pickup_radius = 16
 		this.projectile_dmg = 1
 		this.face = {x=1,y=0}
 		this.hp = 10000
@@ -252,9 +254,11 @@ pickup_type = {
 	init=function(this)
 	end,
 	update=function(this)
-		local dir = get_direction(this, player)
-		this.x += dir.x * 0.25
-		this.y += dir.y * 0.25
+		if get_range(this, player) <= player.pickup_radius then
+			local dir = get_direction(this, player)
+			this.x += dir.x
+			this.y += dir.y
+		end
 		this.anim.update()
 	end
 }
@@ -448,7 +452,7 @@ door_type = {
 		if this.hp <= 0 then
 			--play destroy sound
 			mset(this.x/TILE_SIZE,this.y/TILE_SIZE, FLOOR_TILE)
-			make_particle_group(this.x, this.y)
+			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame])
 			destroy_object(this)
 		else
 			-- play hit sound
@@ -588,7 +592,11 @@ function init_object(type,x,y)
 		else
 			obj.hp -= amount
 			if obj.hp <= 0 then
-				make_particle_group(obj.x,obj.y)
+				if obj.anim ~= nil then
+					make_particle_group(obj.x,obj.y, obj.anim.frames[obj.anim.current_frame])
+				else
+					make_particle_group(obj.x, obj.y)
+				end
 				destroy_object(obj)
 				-- instead check if obj has on_destroy
 				-- which should handle spawning pickups
@@ -764,14 +772,14 @@ end
 
 particles = {}
 particle_pool = {}
-function make_particle_group(x,y)
+function make_particle_group(x,y,sprite)
 	local pgroup
 
 	if count(particle_pool) > 0 then
 		pgroup = particle_pool[1]
 		del(particle_pool, pgroup)
 
-		pgroup.init(x,y)
+		pgroup.init(x,y,sprite)
 		add(particles, pgroup)
 
 		return
@@ -782,23 +790,40 @@ function make_particle_group(x,y)
 		particles={}
 	}
 
-	for i=1,60 do
+	for i=1,64 do
 		add(pgroup.particles, {x=0,y=0,spd=1,dir={x=1,y=0},color=8})
 	end
 
-	pgroup.init = function(x, y)
-		pgroup.lifetime = 60
-		foreach(pgroup.particles, function(p)
-			p.x = x
-			p.y = y
-			p.spd = 0.5
-			p.dir.x = rnd() * (rnd() >= 0.5 and -1 or 1)
-			p.dir.y = rnd() * (rnd() >= 0.5 and -1 or 1)
-			p.color = rnd(flr(15)+1)
-		end)
+	pgroup.init = function(x, y, sprite)
+		pgroup.lifetime = 80
+		if sprite ~= nil then
+			local col = flr(sprite % 16)
+			local row = flr(sprite / 16)
+			local p
+			for px=0,7 do
+				for py=0,7 do
+					p = pgroup.particles[px * 8 + py + 1]
+					p.x = x + px
+					p.y = y + py
+					p.spd = 0.4
+					p.dir.x = rnd() * (rnd() >= 0.5 and -1 or 1)
+					p.dir.y = rnd() * (rnd() >= 0.5 and -1 or 1)
+					p.color = sget(col * TILE_SIZE + px, row * TILE_SIZE + py)
+				end
+			end
+		else
+			foreach(pgroup.particles, function(p)
+				p.x = x
+				p.y = y
+				p.spd = 0.5
+				p.dir.x = rnd() * (rnd() >= 0.5 and -1 or 1)
+				p.dir.y = rnd() * (rnd() >= 0.5 and -1 or 1)
+				p.color = 8
+			end)
+		end
 	end
 
-	pgroup.init(x,y)
+	pgroup.init(x,y,sprite)
 	add(particles, pgroup)
 end
 
@@ -835,7 +860,9 @@ end
 function draw_particles()
 	for group in all(particles) do
 		for p in all(group.particles) do
-			pset(p.x, p.y, p.color)
+			if p.color ~= 0 then
+				pset(p.x, p.y, p.color)
+			end
 		end
 	end
 end
