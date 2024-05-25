@@ -183,7 +183,7 @@ player_type = {
 		this.pickup_radius = 16
 		this.projectile_dmg = 1
 		this.face = {x=1,y=0}
-		this.hp = 10000
+		this.hp = 100
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
@@ -194,6 +194,14 @@ player_type = {
 	take_damage=function(this, amt)
 		this.hp -= amt
 		start_hurt_object(this)
+		if this.hp <= 0 then
+			make_particle_group(this.x, this.y)
+			make_particle_group(this.x+TILE_SIZE, this.y)
+			make_particle_group(this.x+TILE_SIZE, this.y + TILE_SIZE)
+			make_particle_group(this.x, this.y + TILE_HALF_SIZE)
+			make_particle_group(this.x+TILE_HALF_SIZE, this.y + TILE_HALF_SIZE)
+			destroy_object(this)
+		end
 	end,
 	update=function(this)
 		local dx = 0
