@@ -26,11 +26,25 @@ __lua__
 -- [x] make destoyed enemy particles match enemy colors
 -- [x] add floor spike traps
 -- [x] make doors do hurt-flash
+-- [] add player death screen with restart option
 -- [] add wall projectile traps activated by floor tiles (hits player and enemies)
 -- [] add health pickup
 -- [] enemies have low chance to drop health pickup
 -- [] make pickups have random position within area of the enemy sprite
 -- [] add levelup
+-- [] add when player levleup all existing enemies get destroyed
+-- [] add UI elements for player info
+-- [] add main door with minimum damage requirement to take damage
+-- [] add main door health to UI
+-- [] add main door destroyed effects
+-- [] add win screen and show stats
+-- [] add stats (doors destroyed, enemies destroyed, ...)
+-- [] show stats on death and win screen
+
+
+-- other --
+-----------
+
 -- [] add window
 -- [] make window interactive
 -- [] show window on levelup
