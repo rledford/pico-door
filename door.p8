@@ -26,7 +26,7 @@ __lua__
 -- [x] make destoyed enemy particles match enemy colors
 -- [x] add floor spike traps
 -- [x] make doors do hurt-flash
--- [] add player death screen with restart option
+-- [x] add player death screen with restart option
 -- [] add wall projectile traps activated by floor tiles (hits player and enemies)
 -- [] add health pickup
 -- [] enemies have low chance to drop health pickup
@@ -45,8 +45,8 @@ __lua__
 -- other --
 -----------
 
--- [] add window
--- [] make window interactive
+-- [x] add window
+-- [x] make window interactive
 -- [] show window on levelup
 -- [] add upgrade choices to levelup window
 -- [] apply selected upgrade to player and close levelup window
@@ -108,6 +108,7 @@ k_shoot = 4
 k_action = 5
 is_room_transition = false
 debug=false
+window = nil
 
 update_fn = function()
 end
@@ -117,7 +118,7 @@ end
 
 function _init()
 	cls()
-	player = init_object(player_type, 120, 64)
+	player = init_object(player_type, 64, 64)
 	-- make_enemy_spawn_point(48,72,{eye_type, bug_type},50)
 	-- make_enemy_spawn_point(56,72,{eye_type, bug_type},50)
 	-- make_enemy_spawn_point(64,72,{eye_type, bug_type},50)
@@ -153,6 +154,9 @@ function _draw()
 		spr(13, player.target.x, player.target.y)
 	end
 	draw_particles()
+	if window ~= nil then
+		window.draw()
+	end
 	if debug then
 		print("mem kb: "..stat(0),  camera_pos.x + 1, camera_pos.y + 1 + 8, 8)
 		print("player x: "..player.x, camera_pos.x + 1, camera_pos.y + 1 + 16, 8)
@@ -198,7 +202,7 @@ player_type = {
 		this.pickup_radius = 16
 		this.projectile_dmg = 1
 		this.face = {x=1,y=0}
-		this.hp = 100
+		this.hp = 1
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
@@ -216,21 +220,21 @@ player_type = {
 		if this.hp <= 0 then
 			this.dead = true
 			for i=0,5 do
+				make_particle_group(this.x + 2, this.y + 2, nil, 1000)
+				make_particle_group(this.x+TILE_SIZE - 2, this.y + 2, nil, 1000)
+				make_particle_group(this.x+TILE_SIZE - 2, this.y+TILE_SIZE - 2, nil, 1000)
+				make_particle_group(this.x + 2, this.y + TILE_SIZE - 2, nil, 1000)
 				make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame],1000)
-				make_particle_group(this.x, this.y, nil, 1000)
-				make_particle_group(this.x+TILE_SIZE, this.y, nil, 1000)
-				make_particle_group(this.x+TILE_SIZE, this.y+TILE_SIZE, nil, 1000)
-				make_particle_group(this.x, this.y + TILE_SIZE, nil, 1000)
 			end
-			this.anim = make_animation({11,12}, 5)
-			sfx(1)
+			this.anim = nil
+			start_death_transition()
 		end
 	end,
 	update=function(this)
-		this.anim.update()
 		if this.dead then
 			return
 		end
+		this.anim.update()
 		local dx = 0
 		local dy = 0
 		if btnp(k_left) then
@@ -510,7 +514,7 @@ spike_type = {
 		this.hitbox = {x=1,y=1,w=6,h=6}
 		this.frames = {16,17,18}
 		this.frame_times = {5,5,100}
-		this.current_frame = index_of(this.frames, rnd(this.frames))
+		this.current_frame = 1
 		this.frame_time = 0
 		this.frame_step = 1
 		this.reset_time = 100
@@ -928,6 +932,7 @@ update_particles = function()
 		pgroup.lifetime -= 1
 		if pgroup.lifetime > 0 then
 			for p in all(pgroup.particles) do
+				p.dir.y += 0.005
 				p.x += p.dir.x * p.spd
 				p.y += p.dir.y * p.spd
 			end
@@ -1029,6 +1034,44 @@ function end_room_transition()
 	end
 end
 
+-- death --
+-----------
+
+death_window_delay = 120
+death_window_delay_timer = 0
+start_death_transition = function()
+	sfx(1)
+	death_window_delay_timer = death_window_delay
+	update_fn = update_death
+end
+
+update_death = function()
+	death_window_delay_timer -= 1
+	if death_window_delay_timer <= 0 then
+		window = death_window
+	end
+	game_update()
+	death_window.update()
+end
+
+death_window = {
+	update = function()
+		if btnp(k_action) then
+			run()
+		end
+	end,
+	draw = function()
+		local window_rect = {left=camera_pos.x + 16, top=camera_pos.y+32, right=camera_pos.x + 111, bottom=camera_pos.y + 83}
+		local pad = 4
+		rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 0)
+		rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 8)
+		spr(12, window_rect.left + 19, window_rect.top + pad - 2)
+		print("you doid", window_rect.left + 32, window_rect.top + pad)
+		spr(12, window_rect.left + 68, window_rect.top + pad - 2)
+		print("press x to restart", window_rect.left + 13, window_rect.bottom - pad * 2, 7)
+	end
+}
+
 -- utils --
 -----------
 
@@ -1086,8 +1129,8 @@ __gfx__
 000770000000000077766777455444447776677755aaaa5565677656090900000000909000000000000000000568765005687650000000004494494440000004
 000770000000000077766777455444447776677755aaaa55656776560000909009090000000000000000000008777750087777500000000049a99a9449a99a94
 00700700550000557767767744449449776776775a5aa5a5755665570900000000000090000000000000000005877850058778500000000049a99a9449a99a94
-0000000050500505767777674949494576777767a9a55a9a765555679009090999909099000000000000000005888580058885808000000849a99a9449a99a94
-0000000055500555677777764444444455575556aa5555aa67766776090000900900009000000000000000000858858008588580880000884444444444444444
+0000000050500505767777674949494576777767a9a55a9a765555679009090999909099000000000000000005858580058585808000000849a99a9449a99a94
+0000000055500555677777764444444455575556aa5555aa67766776090000900900009000000000000000000855858008558580880000884444444444444444
 00000000000000000500050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000050005000550055000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011d00000011100
 0555055505550555055505550000000000000000000000000000000000000000000000000000000000000000000000000000b000000030000010011001d00d00
