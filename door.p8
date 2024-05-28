@@ -551,15 +551,17 @@ trap_type = {
 		local maxcol = flr((room.x * SCREEN_SIZE + SCREEN_SIZE - 1) / TILE_SIZE)
 		local minrow = flr((room.y * SCREEN_SIZE) / TILE_SIZE)
 		local maxrow = flr((room.y * SCREEN_SIZE + SCREEN_SIZE - 1) / TILE_SIZE)
+		local projectiles = {}
 		-- yes this for-loop is terrible
 		for offset=0,15 do
 			if col - offset >= mincol and not h.left then
 				if mget(col - offset, row) == 1 then
 					h.left = true
 					if offset > 3 then
-						local proj = make_projectile((col - offset) * TILE_SIZE + TILE_HALF_SIZE, this.y, make_animation({52}), this.projectile_dmg, this.projectile_spd, {x=1,y=0})
-						add(proj.collision_groups, PLAYER_GROUP)
-						add(proj.collision_groups, ENEMY_GROUP)
+						add(
+							projectiles,
+							make_projectile((col - offset) * TILE_SIZE + TILE_HALF_SIZE, this.y, make_animation({52}), this.projectile_dmg, this.projectile_spd, {x=1,y=0})
+						)
 					end
 				end
 			end
@@ -567,9 +569,10 @@ trap_type = {
 				if mget(col + offset, row) == 1 then
 					h.right = true
 					if offset > 3 then
-						local proj = make_projectile((col + offset) * TILE_SIZE - TILE_HALF_SIZE, this.y, make_animation({52}), this.projectile_dmg, this.projectile_spd, {x=-1,y=0})
-						add(proj.collision_groups, PLAYER_GROUP)
-						add(proj.collision_groups, ENEMY_GROUP)
+						add(
+							projectiles,
+							make_projectile((col + offset) * TILE_SIZE - TILE_HALF_SIZE, this.y, make_animation({52}), this.projectile_dmg, this.projectile_spd, {x=-1,y=0})
+						)
 					end
 				end
 			end
@@ -577,9 +580,10 @@ trap_type = {
 				if mget(col, row - offset) == 1 then
 					v.up = true
 					if offset > 3 then
-						local proj = make_projectile(this.x, (row - offset) * TILE_SIZE + TILE_HALF_SIZE, make_animation({52}), this.projectile_dmg, this.projectile_spd, {x=0,y=1})
-						add(proj.collision_groups, PLAYER_GROUP)
-						add(proj.collision_groups, ENEMY_GROUP)
+						add(
+							projectiles,
+							make_projectile(this.x, (row - offset) * TILE_SIZE + TILE_HALF_SIZE, make_animation({52}), this.projectile_dmg, this.projectile_spd, {x=0,y=1})
+						)
 					end
 				end
 			end
@@ -587,13 +591,18 @@ trap_type = {
 				if mget(col, row + offset) == 1 then
 					v.down = true
 					if offset > 3 then
-						local proj = make_projectile(this.x, (row + offset) * TILE_SIZE - TILE_HALF_SIZE, make_animation({52}), this.projectile_dmg, this.projectile_spd, {x=0,y=-1})
-						add(proj.collision_groups, PLAYER_GROUP)
-						add(proj.collision_groups, ENEMY_GROUP)
+						add(
+							projectiles,
+							make_projectile(this.x, (row + offset) * TILE_SIZE - TILE_HALF_SIZE, make_animation({52}), this.projectile_dmg, this.projectile_spd, {x=0,y=-1})
+						)
 					end
 				end
 			end
 		end
+		foreach(projectiles, function(proj)
+			add(proj.collision_groups, PLAYER_GROUP)
+			add(proj.collision_groups, ENEMY_GROUP)
+		end)
 	end
 }
 
