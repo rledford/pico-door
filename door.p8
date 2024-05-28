@@ -545,8 +545,7 @@ trap_type = {
 		this.anim = this.active_anim
 		local col = flr(this.x / TILE_SIZE)
 		local row = flr(this.y / TILE_SIZE)
-		local h = {left=false, right=false}
-		local v = {up=false, down=false}
+		local walls = {top=false,right=false,bottom=false,left=false}
 		local mincol = flr((room.x * SCREEN_SIZE) / TILE_SIZE)
 		local maxcol = flr((room.x * SCREEN_SIZE + SCREEN_SIZE - 1) / TILE_SIZE)
 		local minrow = flr((room.y * SCREEN_SIZE) / TILE_SIZE)
@@ -554,9 +553,9 @@ trap_type = {
 		local projectiles = {}
 		-- yes this for-loop is terrible
 		for offset=0,15 do
-			if col - offset >= mincol and not h.left then
+			if col - offset >= mincol and not walls.left then
 				if mget(col - offset, row) == 1 then
-					h.left = true
+					walls.left = true
 					if offset > 3 then
 						add(
 							projectiles,
@@ -565,9 +564,9 @@ trap_type = {
 					end
 				end
 			end
-			if col + offset <= maxcol and not h.right then
+			if col + offset <= maxcol and not walls.right then
 				if mget(col + offset, row) == 1 then
-					h.right = true
+					walls.right = true
 					if offset > 3 then
 						add(
 							projectiles,
@@ -576,9 +575,9 @@ trap_type = {
 					end
 				end
 			end
-			if row - offset >= minrow and not v.up then
+			if row - offset >= minrow and not walls.top then
 				if mget(col, row - offset) == 1 then
-					v.up = true
+					walls.top = true
 					if offset > 3 then
 						add(
 							projectiles,
@@ -587,9 +586,9 @@ trap_type = {
 					end
 				end
 			end
-			if row + offset <= maxrow and not v.down then
+			if row + offset <= maxrow and not walls.bottom then
 				if mget(col, row + offset) == 1 then
-					v.down = true
+					walls.bottom = true
 					if offset > 3 then
 						add(
 							projectiles,
