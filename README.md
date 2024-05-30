@@ -4,6 +4,6 @@ Pico Door is a family-work-in-progress game written in Lua for the [pico-8](http
 
 ## Contributors
 
-- Lanik (pixel art and great ideas)
+- Lanik (pixel art, sound, and great ideas)
 - Isaac (pixel art and great ideas)
 - Ryan (grunt-work)
