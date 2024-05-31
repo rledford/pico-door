@@ -123,7 +123,7 @@ end
 function _init()
 	cls()
 	player = init_object(player_type, 64, 64)
-	init_object(protal_type, 56, 64)
+	init_object(portal_type, 56, 64)
 	end_room_transition(0,0)
 	update_fn = game_update
 end
@@ -652,10 +652,10 @@ spike_type = {
 -- portal --
 ------------
 
-protal_type = {
+portal_type = {
 	init=function(this)
 		this.frames = {21,22,23,24}
-		this.frame_times = {7,7,7,7}
+		this.frame_times = {15,15,15,15}
 		this.current_frame = 1
 		this.frame_time = 0
 		this.frame_step = 1
@@ -668,6 +668,8 @@ protal_type = {
 				this.frame_step = -1
 			elseif this.current_frame == 1 and this.frame_step == -1 then
 				this.frame_step = 1
+				this.frame_time = 0
+				return
 			end
 			this.current_frame += this.frame_step
 		end
