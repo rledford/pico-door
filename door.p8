@@ -217,7 +217,7 @@ player_type = {
 		if this.dead then
 			return
 		end
-		this.hp -= amt
+		this.hp = clamp(this.hp - amt, 0, this.max_hp)
 		start_hurt_object(this)
 		if this.hp <= 0 then
 			this.dead = true
@@ -998,7 +998,7 @@ function make_animation(frames, frame_time)
 	end
 
 	anim.draw = function(obj)
-		if obj.is_hurt and (obj.hurt_duration_timer%2 == 0) then
+		if obj.is_hurt and (obj.hurt_duration_timer%4 == 0) then
 			pal(HURT_FLASH_PAL)
 		end
 		spr(anim.frames[anim.current_frame], obj.x, obj.y)
@@ -1120,12 +1120,16 @@ function draw_ui()
 end
 
 function draw_hp_bar()
-	local pad = 1
-	local w = 48
-	local h = 5
+	local pad = 2
+	local w = 31
+	local h = 3
 	rectfill(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + w + pad, camera_pos.y + h + pad, 0)
 	rectfill(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + pad + flr(player.hp/player.max_hp*w), camera_pos.y + h + pad, 8)
+	if player.is_hurt and (player.hurt_duration_timer%4 == 0) then
+		pal(HURT_FLASH_PAL)
+	end
 	rect(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + w + pad, camera_pos.y + h + pad, 7)
+	pal()
 end
 
 -- rooms --
@@ -1167,7 +1171,6 @@ function start_room_transition(x_index, y_index)
 			end
 		end
 	end
-	-- load next room
 end
 
 function update_room_transition()
