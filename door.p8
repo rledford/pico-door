@@ -28,7 +28,7 @@ __lua__
 -- [x] make doors do hurt-flash
 -- [x] add player death screen with restart option
 -- [x] add wall projectile traps activated by floor tiles (hits player and enemies)
--- [] add portals to port back to main room (and back to room ported from)
+-- [x] add portals to port back to main room (and back to room ported from)
 -- [] add projectiles use palette
 -- [] add doors require matching color palette to destroy (room x + y <= palette?)
 -- [] add health pickup
@@ -93,11 +93,13 @@ DOOR_TILE = 3
 SPIKE_TILE = 4
 ENEMY_SPAWN_TILE = 6
 TRAP_TILE = 19
+PORTAL_TILE = 21
 
 -- globals --
 -------------
 
 room = {x=0,y=0}
+last_portal_used = {room={x=0,y=0},pos={0,0}}
 camera_pos = {x=0,y=0}
 camera_spd = 4
 objects = {}
@@ -123,8 +125,7 @@ end
 function _init()
 	cls()
 	player = init_object(player_type, 64, 64)
-	init_object(portal_type, 56, 64)
-	end_room_transition(0,0)
+	start_room_transition(0,0)
 	update_fn = game_update
 end
 
@@ -674,6 +675,9 @@ portal_type = {
 			this.current_frame += this.frame_step
 		end
 	end,
+	on_activate=function(this)
+		start_portal_transition(this)
+	end,
 	draw=function(this)
 		spr(this.frames[this.current_frame], this.x, this.y, 1, 1, this.frame_step == -1)
 	end
@@ -1100,10 +1104,6 @@ end
 -----------
 
 function start_room_transition(x_index, y_index)
-	if x_index == room.x and y_index == room.y then
-		return
-	end
-
 	foreach(objects, function(obj)
 		if obj.type ~= player_type then
 			add(transition_objects, obj)
@@ -1111,10 +1111,34 @@ function start_room_transition(x_index, y_index)
 		end
 	end)
 
+	
 	is_room_transition = true
 	room.x = x_index
 	room.y = y_index
 	update_fn = update_room_transition
+
+	local tile_type
+	local tx = 0
+	local ty = 0
+	for c=x_index*SCREEN_TILES,x_index*SCREEN_TILES+SCREEN_TILES-1 do
+		for r=y_index*SCREEN_TILES,y_index*SCREEN_TILES+SCREEN_TILES-1 do
+			tx = c*TILE_SIZE
+			ty = r*TILE_SIZE
+			tile_type = mget(c,r)
+			if tile_type == DOOR_TILE then
+				init_object(door_type, tx, ty)
+			elseif tile_type == ENEMY_SPAWN_TILE then
+				make_enemy_spawn_point(tx,ty, {eye_type,fang_type,bug_type, skull_type}, 100)
+			elseif tile_type == SPIKE_TILE then
+				init_object(spike_type, tx, ty)
+			elseif tile_type == TRAP_TILE then
+				init_object(trap_type, tx, ty)
+			elseif tile_type == PORTAL_TILE then
+				mset(c, r, FLOOR_TILE)
+				init_object(portal_type, tx, ty)
+			end
+		end
+	end
 	-- load next room
 end
 
@@ -1146,24 +1170,51 @@ function end_room_transition()
 		del(transition_objects, transition_obj)
 		if transition_obj.type == door_type then
 			mset(transition_obj.x/TILE_SIZE,transition_obj.y/TILE_SIZE,DOOR_TILE)
+		elseif transition_obj.type == portal_type then
+			mset(transition_obj.x/TILE_SIZE,transition_obj.y/TILE_SIZE,PORTAL_TILE)
 		end
 	end
+end
 
-	local tile_type
-	for c=room.x*SCREEN_TILES,room.x*SCREEN_TILES+SCREEN_TILES-1 do
-		for r=room.y*SCREEN_TILES,room.y*SCREEN_TILES+SCREEN_TILES-1 do
-			tile_type = mget(c,r)
-			if tile_type == DOOR_TILE then
-				init_object(door_type, c*TILE_SIZE, r*TILE_SIZE)
-			elseif tile_type == ENEMY_SPAWN_TILE then
-				make_enemy_spawn_point(c*TILE_SIZE,r*TILE_SIZE, {eye_type,fang_type,bug_type, skull_type}, 100)
-			elseif tile_type == SPIKE_TILE then
-				init_object(spike_type, c*TILE_SIZE, r*TILE_SIZE)
-			elseif tile_type == TRAP_TILE then
-				test = init_object(trap_type, c*TILE_SIZE, r*TILE_SIZE)
-			end
-		end 
+function start_portal_transition(portal)
+	if room.x == 0 and room.y == 0 then
+		-- leaving main room
+		local open_pos = get_open_pos_next_to(last_portal_used.pos.x, last_portal_used.pos.y)
+		room.x = last_portal_used.room.x
+		room.y = last_portal_used.room.y
+		camera_pos.x = last_portal_used.room.x * 128
+		camera_pos.y = last_portal_used.room.y * 128
+		player.x = open_pos.x
+		player.y = open_pos.y
+		player.moves = {}
+		destroy_object(portal)
+		start_room_transition(room.x, room.y)
+	else
+		-- entering main room
+		last_portal_used.room.x = room.x
+		last_portal_used.room.y = room.y
+		last_portal_used.pos.x = portal.x
+		last_portal_used.pos.y = portal.y
+		room.x = 0
+		room.y = 0
+		camera_pos.x = 0
+		camera_pos.y = 0
+		player.x = 64
+		player.y = 64
+		player.moves = {}
+		start_room_transition(room.x, room.y)
+		init_object(portal_type, 56, 64)
 	end
+	camera(camera_pos.x, camera_pos.y)
+	end_room_transition()
+end
+
+function update_portal_transition()
+	end_portal_transition()
+end
+
+function end_portal_transition()
+	end_room_transition()
 end
 
 -- death --
@@ -1207,6 +1258,22 @@ death_window = {
 
 -- utils --
 -----------
+
+function get_open_pos_next_to(x, y)
+	local c = flr(x/TILE_SIZE)
+	local r = flr(y/TILE_SIZE)
+	if fget(mget(c+1,r)) == 0 then
+		return {x=x+TILE_SIZE,y=y}
+	elseif fget(mget(c,r+1)) == 0 then
+		return {x=x,y=y+TILE_SIZE}
+	elseif fget(mget(c-1,r)) == 0 then
+		return {x=x-TILE_SIZE,y=y}
+	elseif fget(mget(c,r-1)) == 0 then
+		return {x=x,y=y-TILE_SIZE}
+	else
+		return {x=x,y=y}
+	end
+end
 
 function is_move_to_next_room(x,y)
 	return x > room.x * SCREEN_SIZE + SCREEN_SIZE - 1 or
@@ -1433,7 +1500,7 @@ __map__
 0102020202020202020202020202020101020202060402040602020201020201000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020202020204020202020201020201000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020202020202020202020201020201000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020201020201000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020101020202020202020202020201021501000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020202020202020202020203131301000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0101010101010101010101010101010101020202060202020202020201020201000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0101010101010102040202020204020202130202020202020202020201020201000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
