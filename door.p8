@@ -33,10 +33,11 @@ __lua__
 -- [x] add health pickup
 -- [x] enemies have low chance to drop health pickup
 -- [x] add player projectiles bounce off walls
--- [x] swap player and xp drops to gem
--- [x] cap max player gem (upgradable)
+-- [x] swap player and xp drops to gems
+-- [x] cap max player gems (upgradable)
 -- [x] make enemies drop gems
 -- [x] gems not picked up explode if player dies
+-- [] immediately create random enemies on spawn points when player enters room
 -- [] add npc vendor
 -- [] add vendor purchase window
 -- [] add tile or use X input to activate vendor purchase window when next to vendor
@@ -208,8 +209,8 @@ player_type = {
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
 		this.level = 1
-		this.gem = 0
-		this.max_gem = 100
+		this.gems = 0
+		this.max_gems = 10
 		this.dead = false
 	end,
 	take_damage=function(this, amt)
@@ -299,11 +300,16 @@ player_type = {
 pickup_type = {
 	init=function(this)
 		this.pickup_range = 0
+		this.expiration_time = 500
+		this.expiration_timer = this.expiration_time
 	end,
 	update=function(this)
-		if player.dead then
+		this.expiration_timer -= 1
+		this.anim.frame_time = this.expiration_timer/this.expiration_time <= 0.25 and 4 or this.anim.frame_time
+		if player.dead or this.expiration_timer <= 0 then
 			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame], 100)
 			destroy_object(this)
+			return
 		end
 		if get_range(this, player) <= this.pickup_range then
 			local dir = get_direction(this, player)
@@ -321,10 +327,10 @@ function make_pickup(x, y, anim, pickup_range)
 	return pickup
 end
 
-function make_gem_pickkup(x, y, amount)
+function make_gems_pickkup(x, y, amount)
 	local pickup = make_pickup(x, y, make_animation({28,29}, 10), SCREEN_SIZE)
 	local on_pickup = function(player)
-		player.gem += amount
+		player.gems = clamp(player.gems + amount, 0, player.max_gems)
 		destroy_object(pickup)
 	end
 	pickup.hitbox={x=2,y=2,w=3,h=3}
@@ -333,7 +339,7 @@ function make_gem_pickkup(x, y, amount)
 end
 
 function make_hp_pickup(x, y, amount)
-	local pickup = make_pickup(x, y, make_animation({9}), 16)
+	local pickup = make_pickup(x, y, make_animation({9,10}, 16), 12)
 	local on_pickup = function(player)
 		player.hp = clamp(player.hp + amount, player.hp, player.max_hp)
 		destroy_object(pickup)
@@ -761,6 +767,7 @@ function make_enemy_spawn_point(x, y, enemy_types, spawn_time)
 	for i=1,count(enemy_types) do
 		add(sp.enemy_types, enemy_types[i])
 	end
+	init_object(rnd(sp.enemy_types), x, y)
 	return sp
 end
 
@@ -852,7 +859,7 @@ function init_object(type,x,y)
 					if rnd(1000) > 900 then
 						make_hp_pickup(obj.x,obj.y,1)
 					else
-						make_gem_pickkup(obj.x,obj.y,1)
+						make_gems_pickkup(obj.x,obj.y,1)
 					end
 					sfx(4)
 				end
@@ -1134,16 +1141,14 @@ function draw_ui()
 	if player == nil then
 		return
 	end
-	rectfill(camera_pos.x, camera_pos.y, camera_pos.x + TILE_SIZE * 4 + 2, camera_pos.y + TILE_SIZE * 2 - 2, 0)
 	draw_hp_bar()
-	spr(28, camera_pos.x, camera_pos.y + 2 + 4)
-	print(player.gem.."/"..player.max_gem, camera_pos.x + 8, camera_pos.y + 8, 6)
+	draw_gems_bar()
 end
 
 function draw_hp_bar()
-	local pad = 2
+	local pad = 1
 	local w = 31
-	local h = 3
+	local h = 2
 	rectfill(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + w + pad, camera_pos.y + h + pad, 0)
 	rectfill(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + pad + flr(player.hp/player.max_hp*w), camera_pos.y + h + pad, 8)
 	if player.is_hurt and (player.hurt_duration_timer%4 == 0) then
@@ -1151,6 +1156,16 @@ function draw_hp_bar()
 	end
 	rect(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + w + pad, camera_pos.y + h + pad, 7)
 	pal()
+end
+
+function draw_gems_bar()
+	local yoffset = 3
+	local pad = 1
+	local w = 31
+	local h = 2
+	rectfill(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + w + pad, camera_pos.y + h + pad + yoffset, 0)
+	rectfill(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + pad + flr(player.gems/player.max_gems*w), camera_pos.y + h + pad + yoffset, 11)
+	rect(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + w + pad, camera_pos.y + h + pad + yoffset, 7)
 end
 
 -- rooms --
@@ -1375,13 +1390,13 @@ function get_manhattan(pos,dest)
 	return {x=flr(dest.x-pos.x),y=flr(dest.y-pos.y)}
 end
 __gfx__
-0000000055500555677777764474474467777776aa5555aa67766776090000900900009008800880088008800085880000858800880000886666666669a99a96
-0000000050500505767777677744447776777767a9a55a9a76555567909090099909909988888888800880080858858008588580800000086444444664944946
-00700700550000557767767747477474755575555a5aa5a5755665570000009009000000888888888000000805787780057877800000000049a99a9440000004
-000770000000000077766777447777447776677755aaaa5565677656090900000000909088888888800000080568765005687650000000004494494440000004
-000770000000000077766777447777447776677755aaaa55656776560000909009090000088888800800008008777750087777500000000049a99a9449a99a94
-00700700550000557767767747477474776776775a5aa5a5755665570900000000000090008888000080080005877850058778500000000049a99a9449a99a94
-0000000050500505767777677744447776777767a9a55a9a765555679009090999909099000880000008800005858580058585808000000849a99a9449a99a94
+0000000055500555677777764474474467777776aa5555aa67766776090000900900009000220220008808800085880000858800880000886666666669a99a96
+0000000050500505767777677744447776777767a9a55a9a76555567909090099909909902882882082282280858858008588580800000086444444664944946
+00700700550000557767767747477474755575555a5aa5a5755665570000009009000000028888820822222805787780057877800000000049a99a9440000004
+000770000000000077766777447777447776677755aaaa5565677656090900000000909002888882082222280568765005687650000000004494494440000004
+000770000000000077766777447777447776677755aaaa55656776560000909009090000002888200082228008777750087777500000000049a99a9449a99a94
+00700700550000557767767747477474776776775a5aa5a5755665570900000000000090000282000008280005877850058778500000000049a99a9449a99a94
+0000000050500505767777677744447776777767a9a55a9a765555679009090999909099000020000000800005858580058585808000000849a99a9449a99a94
 0000000055500555677777764474474455575556aa5555aa67766776090000900900009000000000000000000855858008558580880000884444444444444444
 000000000000000005000500677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000000000000000000000000000000
 0000000005000500055005507ffffff7767777670c0cccc00c00ccc00c000cc00c0000c0000000000000000000000000000000000000000000cc0000000cc000
