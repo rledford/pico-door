@@ -173,6 +173,7 @@ function _draw()
 			circ(player.x + 4, player.y + 4, player.auto_target_radius, 8)
 		end
 	end
+	draw_ui()
 end
 
 -- game update --
@@ -205,13 +206,14 @@ player_type = {
 		this.projectile_dmg = 1
 		this.projectile_spd = 1.3
 		this.face = {x=1,y=0}
-		this.hp = 100
+		this.hp = 10
+		this.max_hp = 10
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
 		this.level = 1
 		this.xp = 0
-		this.max_xp = 10
+		this.max_xp = 5
 		this.dead = false
 	end,
 	take_damage=function(this, amt)
@@ -1098,6 +1100,22 @@ function draw_particles()
 			end
 		end
 	end
+end
+
+function draw_ui()
+	if player == nil then
+		return
+	end
+	draw_hp_bar()
+end
+
+function draw_hp_bar()
+	local pad = 1
+	local w = 48
+	local h = 5
+	rectfill(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + w + pad, camera_pos.y + h + pad, 0)
+	rectfill(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + pad + flr(player.hp/player.max_hp*w), camera_pos.y + h + pad, 8)
+	rect(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + w + pad, camera_pos.y + h + pad, 7)
 end
 
 -- rooms --
