@@ -33,12 +33,13 @@ __lua__
 -- [x] add health pickup
 -- [x] enemies have low chance to drop health pickup
 -- [x] add player projectiles bounce off walls
--- [] swap player and xp drops to gold
--- [] cap max player gold (upgradable)
+-- [x] swap player and xp drops to gem
+-- [x] cap max player gem (upgradable)
+-- [x] make enemies drop gems
+-- [x] gems not picked up explode if player dies
 -- [] add npc vendor
 -- [] add vendor purchase window
 -- [] add tile or use X input to activate vendor purchase window when next to vendor
--- [] make enemies drop gold
 -- [] add main door with minimum damage requirement to take damage
 -- [] add main door health to UI
 -- [] add main door destroyed effects
@@ -207,8 +208,8 @@ player_type = {
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
 		this.level = 1
-		this.xp = 0
-		this.max_xp = 5
+		this.gem = 0
+		this.max_gem = 100
 		this.dead = false
 	end,
 	take_damage=function(this, amt)
@@ -300,6 +301,10 @@ pickup_type = {
 		this.pickup_range = 0
 	end,
 	update=function(this)
+		if player.dead then
+			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame], 100)
+			destroy_object(this)
+		end
 		if get_range(this, player) <= this.pickup_range then
 			local dir = get_direction(this, player)
 			this.x += dir.x
@@ -316,10 +321,10 @@ function make_pickup(x, y, anim, pickup_range)
 	return pickup
 end
 
-function make_xp_pickkup(x, y, amount)
+function make_gem_pickkup(x, y, amount)
 	local pickup = make_pickup(x, y, make_animation({28,29}, 10), SCREEN_SIZE)
 	local on_pickup = function(player)
-		player.xp += amount
+		player.gem += amount
 		destroy_object(pickup)
 	end
 	pickup.hitbox={x=2,y=2,w=3,h=3}
@@ -847,7 +852,7 @@ function init_object(type,x,y)
 					if rnd(1000) > 900 then
 						make_hp_pickup(obj.x,obj.y,1)
 					else
-						make_xp_pickkup(obj.x,obj.y,1)
+						make_gem_pickkup(obj.x,obj.y,1)
 					end
 					sfx(4)
 				end
@@ -1129,7 +1134,10 @@ function draw_ui()
 	if player == nil then
 		return
 	end
+	rectfill(camera_pos.x, camera_pos.y, camera_pos.x + TILE_SIZE * 4 + 2, camera_pos.y + TILE_SIZE * 2 - 2, 0)
 	draw_hp_bar()
+	spr(28, camera_pos.x, camera_pos.y + 2 + 4)
+	print(player.gem.."/"..player.max_gem, camera_pos.x + 8, camera_pos.y + 8, 6)
 end
 
 function draw_hp_bar()
@@ -1377,10 +1385,10 @@ __gfx__
 0000000055500555677777764474474455575556aa5555aa67766776090000900900009000000000000000000855858008558580880000884444444444444444
 000000000000000005000500677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000000000000000000000000000000
 0000000005000500055005507ffffff7767777670c0cccc00c00ccc00c000cc00c0000c0000000000000000000000000000000000000000000cc0000000cc000
-0555055505550555055505557f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c0000000000000000000000000000b0000000300000c1ccc000cc1c00
-000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c000000000000000000000000000b3b000003b30000c111c00c111cc0
-000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c0000000000000000000000000000b000000030000c111c000cc111c0
-0000000000000000500050007f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c00000000000000000000000000000000000000000ccc1c0000c1cc00
+0555055505550555055505557f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c00000000000000000000000000033000000bb00000c1ccc000cc1c00
+000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c000000000000000000000000003bb30000b33b0000c111c00c111cc0
+000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c000000000000000000000000003bb30000b33b000c111c000cc111c0
+0000000000000000500050007f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c00000000000000000000000000033000000bb0000ccc1c0000c1cc00
 0000000050005000550055007ffffff7767777670c0cccc00c00ccc00c000cc00c0000c000000000000000000000000000000000000000000000cc00000cc000
 555055505550555055505550677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000000000000000000000000000000
 00333000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
