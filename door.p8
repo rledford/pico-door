@@ -32,9 +32,13 @@ __lua__
 -- [x] add UI elements for player info
 -- [x] add health pickup
 -- [x] enemies have low chance to drop health pickup
--- [] add projectiles use palette
--- [] add doors require matching color palette to destroy (room x + y <= palette?)
--- [] add levelup
+-- [x] add player projectiles bounce off walls
+-- [] swap player and xp drops to gold
+-- [] cap max player gold (upgradable)
+-- [] add npc vendor
+-- [] add vendor purchase window
+-- [] add tile or use X input to activate vendor purchase window when next to vendor
+-- [] make enemies drop gold
 -- [] add main door with minimum damage requirement to take damage
 -- [] add main door health to UI
 -- [] add main door destroyed effects
@@ -48,18 +52,12 @@ __lua__
 
 -- [x] add window
 -- [x] make window interactive
--- [] show window on levelup
--- [] add upgrade choices to levelup window
--- [] apply selected upgrade to player and close levelup window
--- [] persist which chests have been destroyed
--- [] make destroyed chests not respawn when reentering room
 -- [] tune enemy movement and damage
 -- [] make enemy spawn points configurable or pull from different type pools based on conditions
 
 -- ideas --
 -----------
 
--- make enemies drop gold
 -- vendors and/or traveling vendors to sell pickukps
 -- add a skeleton behind a desk who says "hello"
 -- projectiles bounce off walls
@@ -276,6 +274,7 @@ player_type = {
 				dir.y = 1
 			end
 			local proj = make_projectile(this.x, this.y, make_animation({30,31}, 4), this.projectile_dmg, this.projectile_spd, dir)
+			proj.bounce = true
 			add(proj.collision_groups, ENEMY_GROUP)
 		end
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
@@ -353,11 +352,13 @@ projectile_type = {
 		this.lifetime = 120
 		this.collision_groups = {}
 		this.damage = 1
+		this.bounce = false
 	end,
 	update=function(this)
 		this.lifetime -= 1
-		this.x += this.direction.x * this.spd
-		this.y += this.direction.y * this.spd
+		this.anim.update()
+		local nextx = this.x + this.direction.x * this.spd
+		local nexty = this.y + this.direction.y * this.spd
 		if this.lifetime <= 0 or is_move_to_next_room(this.x, this.y) then
 			destroy_object(this)
 			return
@@ -370,10 +371,22 @@ projectile_type = {
 			destroy_object(this)
 			return
 		end
-		if not this.can_move_to((this.x + TILE_HALF_SIZE)/TILE_SIZE, (this.y + TILE_HALF_SIZE)/TILE_SIZE) then
-			destroy_object(this)
+		if not this.can_move_to((nextx + TILE_HALF_SIZE)/TILE_SIZE, (nexty + TILE_HALF_SIZE)/TILE_SIZE) then
+			if this.bounce then
+				-- cheap bounce calc without normals since all walls are axis-aligned (no need to calculate collision normals)
+				if not this.can_move_to((this.x + TILE_HALF_SIZE)/TILE_SIZE, (nexty + TILE_HALF_SIZE)/TILE_SIZE) then
+					-- hit top or bottom of wall so reverse y
+					this.direction.y *= -1
+				elseif not this.can_move_to((nextx + TILE_HALF_SIZE)/TILE_SIZE, (this.y + TILE_HALF_SIZE)/TILE_SIZE) then
+					-- hit left or right of wall so reverse x
+					this.direction.x *= -1
+				end
+			else
+				destroy_object(this)
+			end
 		end
-		this.anim.update()
+		this.x = nextx
+		this.y = nexty
 	end
 }
 
