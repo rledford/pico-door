@@ -29,14 +29,12 @@ __lua__
 -- [x] add player death screen with restart option
 -- [x] add wall projectile traps activated by floor tiles (hits player and enemies)
 -- [x] add portals to port back to main room (and back to room ported from)
+-- [x] add UI elements for player info
+-- [x] add health pickup
+-- [x] enemies have low chance to drop health pickup
 -- [] add projectiles use palette
 -- [] add doors require matching color palette to destroy (room x + y <= palette?)
--- [] add health pickup
--- [] enemies have low chance to drop health pickup
--- [] make pickups have random position within area of the enemy sprite
 -- [] add levelup
--- [] add when player levleup all existing enemies get destroyed
--- [] add UI elements for player info
 -- [] add main door with minimum damage requirement to take damage
 -- [] add main door health to UI
 -- [] add main door destroyed effects
@@ -202,7 +200,6 @@ player_type = {
 		this.hitbox={x=2,y=2,w=3,h=4}
 		this.target=nil
 		this.auto_target_radius = 40
-		this.pickup_radius = 16
 		this.projectile_dmg = 1
 		this.projectile_spd = 1.3
 		this.face = {x=1,y=0}
@@ -225,10 +222,6 @@ player_type = {
 		if this.hp <= 0 then
 			this.dead = true
 			for i=0,5 do
-				-- make_particle_group(this.x + 2, this.y + 2, nil, 1000)
-				-- make_particle_group(this.x+TILE_SIZE - 2, this.y + 2, nil, 1000)
-				-- make_particle_group(this.x+TILE_SIZE - 2, this.y+TILE_SIZE - 2, nil, 1000)
-				-- make_particle_group(this.x + 2, this.y + TILE_SIZE - 2, nil, 1000)
 				make_particle_group(this.x+TILE_HALF_SIZE, this.y+TILE_HALF_SIZE, nil, 1000)
 				make_particle_group(this.x+TILE_HALF_SIZE, this.y+TILE_HALF_SIZE, nil, 1000)
 				make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame],1000)
@@ -305,9 +298,10 @@ player_type = {
 
 pickup_type = {
 	init=function(this)
+		this.pickup_range = 0
 	end,
 	update=function(this)
-		if get_range(this, player) <= player.pickup_radius then
+		if get_range(this, player) <= this.pickup_range then
 			local dir = get_direction(this, player)
 			this.x += dir.x
 			this.y += dir.y
@@ -316,16 +310,28 @@ pickup_type = {
 	end
 }
 
-function make_pickup(x, y, anim)
+function make_pickup(x, y, anim, pickup_range)
 	local pickup = init_object(pickup_type, x, y)
+	pickup.pickup_range = pickup_range or 0
 	pickup.anim = anim
 	return pickup
 end
 
 function make_xp_pickkup(x, y, amount)
-	local pickup = make_pickup(x, y, make_animation({28,29}, 10))
+	local pickup = make_pickup(x, y, make_animation({28,29}, 10), SCREEN_SIZE)
 	local on_pickup = function(player)
 		player.xp += amount
+		destroy_object(pickup)
+	end
+	pickup.hitbox={x=2,y=2,w=3,h=3}
+	pickup.on_pickup = on_pickup
+	return pickup
+end
+
+function make_hp_pickup(x, y, amount)
+	local pickup = make_pickup(x, y, make_animation({9}), 16)
+	local on_pickup = function(player)
+		player.hp = clamp(player.hp + amount, player.hp, player.max_hp)
 		destroy_object(pickup)
 	end
 	pickup.hitbox={x=2,y=2,w=3,h=3}
@@ -427,7 +433,7 @@ bug_type = {
 		this.hp = 1
 		this.move_rate=15
 		this.move_timer=0
-		this.touch_damage = 10
+		this.touch_damage = 2
 	end,
 	update=function(this)
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
@@ -450,7 +456,7 @@ fang_type = {
 		this.hp = 1
 		this.move_rate=5
 		this.move_timer=0
-		this.touch_damage = 15
+		this.touch_damage = 2
 	end,
 	update=function(this)
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
@@ -475,7 +481,7 @@ skull_type = {
 		this.hp = 2
 		this.move_rate=5
 		this.move_timer=0
-		this.touch_damage = 20
+		this.touch_damage = 1
 	end,
 	update=function(this)
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
@@ -825,7 +831,11 @@ function init_object(type,x,y)
 				-- instead check if obj has on_destroy
 				-- which should handle spawning pickups
 				if obj.type ~= player_type then
-					make_xp_pickkup(obj.x,obj.y,1)
+					if rnd(1000) > 900 then
+						make_hp_pickup(obj.x,obj.y,1)
+					else
+						make_xp_pickkup(obj.x,obj.y,1)
+					end
 					sfx(4)
 				end
 				return
