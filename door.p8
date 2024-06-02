@@ -356,7 +356,7 @@ upgrade_projectile_damage = {
 	end
 }
 
-function show_vendor_window(vendor)
+function show_vendor_window(vendor_obj)
 	local win = {
 		update = function()
 			if btnp(k_action) then
@@ -369,14 +369,19 @@ function show_vendor_window(vendor)
 			local pad = 4
 			rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 13)
 			rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 2)
+			print(count(vendor_obj.inventory), window_rect.left + pad, window_rect.top + pad, 7)
 		end
 	}
 	window = win
-	update_fn = update_vendor
-end
-
-function update_vendor()
-	window.update()
+	update_fn = function()
+		if btnp(k_action) then
+			window = nil
+			update_fn = game_update
+			return
+		end
+		window.update()
+		vendor_obj.type.update(vendor_obj)
+	end
 end
 
 -- pickups --
@@ -1293,7 +1298,7 @@ function start_room_transition(x_index, y_index)
 			elseif tile_type == VENDOR_TILE then
 				mset(c, r, FLOOR_TILE)
 				if vendor == nil then
-					init_object(vendor_type, tx, ty)
+					vendor = init_object(vendor_type, tx, ty)
 				else
 					add(objects, vendor)
 				end
