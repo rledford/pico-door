@@ -40,6 +40,7 @@ __lua__
 -- [x] immediately create random enemies on spawn points when player enters room
 -- [x] add npc vendor
 -- [x] interacting close to vendor shows upgrade purchase window
+-- [] add sfx for vendor purchase success and fail
 -- [] add upgrades, navigation and purchase to vendor window
 -- [] add tile or use X input to activate vendor purchase window when next to vendor
 -- [] add main door with minimum damage requirement to take damage
@@ -155,7 +156,7 @@ function _draw()
 	end
 	draw_particles()
 	if window ~= nil then
-		window.draw()
+		window.draw(window)
 	end
 	if debug then
 		print("mem kb: "..stat(0),  camera_pos.x + 1, camera_pos.y + 1 + 8, 8)
@@ -210,8 +211,8 @@ player_type = {
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
 		this.level = 1
-		this.gems = 0
-		this.max_gems = 10
+		this.gems = 300
+		this.max_gems = 500
 		this.dead = false
 	end,
 	take_damage=function(this, amt)
@@ -333,6 +334,7 @@ upgrade_max_hp = {
 	persist = true,
 	on_upgrade = function()
 		player.max_hp += 10
+		player.hp = player.max_hp
 	end
 }
 
@@ -358,18 +360,46 @@ upgrade_projectile_damage = {
 
 function show_vendor_window(vendor_obj)
 	local win = {
-		update = function()
+		selected_upgrade = 1,
+		update = function(this)
 			if btnp(k_action) then
 				window = nil
 				update_fn = game_update
+			elseif btnp(k_shoot) then
+				local upgrade = vendor_obj.inventory[this.selected_upgrade]
+				if player.gems - upgrade.cost < 0 then
+					-- play unable-to-purchase sound
+					return
+				end
+				if not upgrade.persist then
+					del(vendor_obj.inventory, upgrade)
+					clamp(this.selected_upgrade, 1, count(vendor_obj.inventory))
+				end
+				player.gems -= upgrade.cost
+				upgrade.on_upgrade()
+			elseif btnp(k_left) then
+				this.selected_upgrade = clamp(this.selected_upgrade-1, 1, count(vendor_obj.inventory))
+			elseif btnp(k_right) then
+				this.selected_upgrade = clamp(this.selected_upgrade+1, 1, count(vendor_obj.inventory))
 			end
 		end,
-		draw = function()
+		draw = function(this)
 			local window_rect = {left=camera_pos.x + 8, top=camera_pos.y+32, right=camera_pos.x + 119, bottom=camera_pos.y + 83}
 			local pad = 4
 			rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 13)
 			rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 2)
+			local itemx
+			for i=0,count(vendor_obj.inventory)-1 do
+				itemx = window_rect.left + TILE_SIZE * i + pad + (pad * i)
+				itemy = window_rect.top + TILE_SIZE
+				rectfill(itemx, itemy, itemx + TILE_SIZE, itemy + TILE_SIZE, 0)
+				if i+1 == this.selected_upgrade then
+					rect(itemx-1, itemy-1, itemx + TILE_SIZE + 1, itemy + TILE_SIZE + 1, 3)
+				end
+			end
 			print(count(vendor_obj.inventory), window_rect.left + pad, window_rect.top + pad, 7)
+			print(this.selected_upgrade, window_rect.left + pad, window_rect.top + pad * 3, 7)
+			print(player.ricochet, window_rect.left + pad, window_rect.top + pad * 6, 7)
 		end
 	}
 	window = win
@@ -379,7 +409,7 @@ function show_vendor_window(vendor_obj)
 			update_fn = game_update
 			return
 		end
-		window.update()
+		window.update(window)
 		vendor_obj.type.update(vendor_obj)
 	end
 end
@@ -1492,10 +1522,10 @@ end
 __gfx__
 0000000055500555677777764454454467777776aa5555aa67766776090000900900009000220220008808800085880000858800880000886666666669a99a96
 0000000050500505767777675544445576777767a9a55a9a76555567909090099909909902882882082282280858858008588580800000086444444664944946
-00700700550000557767767745455454755575555a5aa5a5755665570000009009000000028888820822222805787780057877800000000049a99a9440000004
-000770000000000077766777445555447776677755aaaa5565677656090900000000909002888882082222280568765005687650000000004494494440000004
-000770000000000077766777445555447776677755aaaa55656776560000909009090000002888200082228008777750087777500000000049a99a9449a99a94
-00700700550000557767767745455454776776775a5aa5a5755665570900000000000090000282000008280005877850058778500000000049a99a9449a99a94
+00700700550000557767767745455454755575555a5aa5a5755665570000009009000000028888820822222805787780056866800000000049a99a9440000004
+000770000000000077766777445555447776677755aaaa5565677656090900000000909002888882082222280568765005786750000000004494494440000004
+000770000000000077766777445555447776677755aaaa55656776560000909009090000002888200082228008777750086666500000000049a99a9449a99a94
+00700700550000557767767745455454776776775a5aa5a5755665570900000000000090000282000008280005877850058668500000000049a99a9449a99a94
 0000000050500505767777675544445576777767a9a55a9a765555679009090999909099000020000000800005858580058585808000000849a99a9449a99a94
 0000000055500555677777764454454455575556aa5555aa67766776090000900900009000000000000000000855858008558580880000884444444444444444
 000000000000000005000500677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000000000000000000000000000000
