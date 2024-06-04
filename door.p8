@@ -42,8 +42,11 @@ __lua__
 -- [x] interacting close to vendor shows upgrade purchase window
 -- [x] add sfx when vendor window opens and closes
 -- [x] add sfx for vendor purchase success and fail
--- [] add upgrades, navigation and purchase to vendor window
--- [] add tile or use X input to activate vendor purchase window when next to vendor
+-- [x] add upgrades, navigation and purchase to vendor window
+-- [x] add tile or use X input to activate vendor purchase window when next to vendor
+-- [] add projectile upgrade to damage and pass-through instead of destroy on hit
+-- [] add emeny stats vary on difficulty
+-- increases difficulty by x % every time player purchases an upgrade
 -- [] add main door with minimum damage requirement to take damage
 -- [] add main door health to UI
 -- [] add main door destroyed effects
@@ -107,6 +110,7 @@ camera_spd = 4
 objects = {}
 transition_objects = {}
 types = {}
+difficulty = 1.0
 
 k_left = 0
 k_right = 1
@@ -206,14 +210,14 @@ player_type = {
 		this.projectile_speed = 1.3
 		this.ricochet = false
 		this.face = {x=1,y=0}
-		this.hp = 10
 		this.max_hp = 10
+		this.hp = this.max_hp
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
 		this.level = 1
+		this.max_gems = 50
 		this.gems = 0
-		this.max_gems = 100
 		this.dead = false
 	end,
 	take_damage=function(this, amt)
@@ -305,8 +309,8 @@ vendor_type = {
 		this.inventory = {
 			upgrade_max_gems,
 			upgrade_max_hp,
+			upgrade_projectile_damage,
 			upgrade_projectile_ricochet,
-			upgrade_projectile_damage
 		}
 		this.anim = make_animation({37,38}, 20)
 	end,
@@ -321,11 +325,11 @@ vendor_type = {
 upgrade_max_gems = {
 	spr = 40,
 	name = "satchel",
-	description = "+100 to max gems.",
-	cost = 100,
+	description = "+25 to max gems.",
+	cost = 50,
 	persist = true,
 	on_upgrade = function()
-		player.max_gems += 100
+		player.max_gems += 25
 	end
 }
 
@@ -333,7 +337,7 @@ upgrade_max_hp = {
 	spr = 43,
 	name = "hp",
 	description = "+10 to max hp.",
-	cost = 200,
+	cost = 100,
 	persist = true,
 	on_upgrade = function()
 		player.max_hp += 10
@@ -345,7 +349,7 @@ upgrade_projectile_ricochet = {
 	spr = 42,
 	name = "ricochet",
 	description = "projectiles bounce.",
-	cost = 300,
+	cost = 500,
 	persist = false,
 	on_upgrade = function()
 		player.ricochet = true
@@ -889,12 +893,17 @@ enemy_spawn_point_type = {
 	end
 }
 
-function make_enemy_spawn_point(x, y, enemy_types, spawn_time)
+function make_enemy_spawn_point(x, y)
+	local spawn_time = flr(1/difficulty * 100)
 	sp = init_object(enemy_spawn_point_type, x, y)
 	sp.spawn_time = spawn_time
 	sp.spawn_timer = spawn_time
-	for i=1,count(enemy_types) do
-		add(sp.enemy_types, enemy_types[i])
+	if difficulty <= 1.1 then
+		sp.enemy_types = {eye_type, bug_type}
+	elseif difficulty <= 1.5 then
+		sp.enemy_types = {eye_type, bug_type, fang_type}
+	else
+		sp.enemy_types = {eye_type, bug_type, fang_type, skull_type}
 	end
 	init_object(rnd(sp.enemy_types), x, y)
 	return sp
@@ -1326,7 +1335,7 @@ function start_room_transition(x_index, y_index)
 			if tile_type == DOOR_TILE then
 				init_object(door_type, tx, ty)
 			elseif tile_type == ENEMY_SPAWN_TILE then
-				make_enemy_spawn_point(tx,ty, {eye_type,fang_type,bug_type, skull_type}, 100)
+				make_enemy_spawn_point(tx,ty)
 			elseif tile_type == SPIKE_TILE then
 				init_object(spike_type, tx, ty)
 			elseif tile_type == TRAP_TILE then
@@ -1545,14 +1554,14 @@ __gfx__
 0000000000000000500050007f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c00000000000000000000000000033000000bb0000ccc1c0000c1cc00
 0000000050005000550055007ffffff7767777670c0cccc00c00ccc00c000cc00c0000c000000000000000000000000000000000000000000000cc00000cc000
 555055505550555055505550677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000000000000000000000000000000
-00333000000000000000000000000000000000000002200000022000444444440044440000000000000700000220022000000000000000000000000000000000
-00535000000000000000000000000000000000000021120000211200444444440400004000cc7700000770002782288200000000000000000099990000aaaa00
-00181000000000000000000000000000000000000028e200002e820044444444040330400071c7c00070070c777888820000000000000000099aa9900aa99aa0
-0353530000000000000000000000000000000000025115200251152066666666403bb304077717c00070007c27887882000000000000000009a99a900a9aa9a0
-0335330000000000000000000000000000000000021b31200213b12099499949943bb3440c71170007000ccc28877782000000000000000009a99a900a9aa9a0
-08535800000000000000000000000000000000000213b120021b312044444444444444440ccc170007000000028878200000000000000000099aa9900aa99aa0
-0030300000000000000000000000000000000000020dd020020dd020444444444494494400007770700000000028820000000000000000000099990000aaaa00
-0030300000000000000000000000000000000000020dd020020dd020949994990444444000000000700000000002200000000000000000000000000000000000
+0033300000000000000000000000000000000000000220000002200044444444004444000ccc0000007770000220022000000000000000000000000000000000
+0053500000000000000000000000000000000000002112000021120044444444040000400711cccc0077770c2782288200000000000000000099990000aaaa00
+00181000000000000000000000000000000000000028e200002e820044444444040330407771111c0770777c777888820000000000000000099aa9900aa99aa0
+0353530000000000000000000000000000000000025115200251152066666666403bb3040711711c077007cc27887882000000000000000009a99a900a9aa9a0
+0335330000000000000000000000000000000000021b31200213b12099499949943bb344c11777c07700cccc28877782000000000000000009a99a900a9aa9a0
+08535800000000000000000000000000000000000213b120021b31204444444444444444c11171c077000000028878200000000000000000099aa9900aa99aa0
+0030300000000000000000000000000000000000020dd020020dd0204444444444944944cccc11c0700000000028820000000000000000000099990000aaaa00
+0030300000000000000000000000000000000000020dd020020dd02094999499044444400000ccc0700000000002200000000000000000000000000000000000
 00003000000000000111111001111110000000000009900000999900000000000e2ee2e000000000000000000000000000000000000000000000000000000000
 000330000000300011111111011111100008888809299290009229000e2ee2e0022ee220000000000011d0000001110000999a00009aaa0000ee920000e22200
 00333300000330001211112111111111008999980299992009722790022ee220022ee220000000000010011001d00d000a9aa9900aa99a9002e22ee0029ee9e0
