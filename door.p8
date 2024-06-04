@@ -45,6 +45,7 @@ __lua__
 -- [x] add upgrades, navigation and purchase to vendor window
 -- [x] add tile or use X input to activate vendor purchase window when next to vendor
 -- [] add projectile upgrade to damage and pass-through instead of destroy on hit
+-- [] add projectile fire-rate upgrade
 -- [] add emeny stats vary on difficulty
 -- increases difficulty by x % every time player purchases an upgrade
 -- [] add main door with minimum damage requirement to take damage
