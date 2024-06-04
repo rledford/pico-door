@@ -311,7 +311,9 @@ vendor_type = {
 			upgrade_max_gems,
 			upgrade_max_hp,
 			upgrade_projectile_damage,
+			upgrade_fire_rate,
 			upgrade_projectile_ricochet,
+			upgrade_projectile_pierce,
 		}
 		this.anim = make_animation({37,38}, 20)
 	end,
@@ -346,6 +348,18 @@ upgrade_max_hp = {
 	end
 }
 
+upgrade_fire_rate = {
+	spr = 44,
+	name = "fast-shot",
+	description = "increase rate of fire.",
+	cost = 200,
+	persist = false,
+	on_upgrade = function()
+		player.fire_rate = 10
+		player.fire_timer = 0
+	end
+}
+
 upgrade_projectile_ricochet = {
 	spr = 42,
 	name = "ricochet",
@@ -365,6 +379,17 @@ upgrade_projectile_damage = {
 	persist = true,
 	on_upgrade = function()
 		player.projectil_damage += 1
+	end
+}
+
+upgrade_projectile_pierce = {
+	spr = 45,
+	name = "pierce",
+	description = "projectiles pierce.",
+	cost = 1000,
+	persist = false,
+	on_upgrade = function()
+		player.pierce = true
 	end
 }
 
@@ -404,7 +429,7 @@ function show_vendor_window(vendor_obj)
 			rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 2)
 			local itemx
 			for i=0,count(vendor_obj.inventory)-1 do
-				itemx = window_rect.left + 32 + TILE_SIZE * i + pad + (pad * i)
+				itemx = window_rect.left + 20 + TILE_SIZE * i + pad + (pad * i)
 				itemy = window_rect.top + pad + TILE_SIZE
 				rectfill(itemx-1, itemy-1, itemx + TILE_SIZE, itemy + TILE_SIZE, 0)
 				spr(vendor_obj.inventory[i+1].spr, itemx, itemy)
