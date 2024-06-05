@@ -44,8 +44,8 @@ __lua__
 -- [x] add sfx for vendor purchase success and fail
 -- [x] add upgrades, navigation and purchase to vendor window
 -- [x] add tile or use X input to activate vendor purchase window when next to vendor
--- [] add projectile upgrade to damage and pass-through instead of destroy on hit
--- [] add projectile fire-rate upgrade
+-- [x] add projectile upgrade to damage and pass-through instead of destroy on hit
+-- [x] add projectile fire-rate upgrade
 -- [] add emeny stats vary on difficulty
 -- increases difficulty by x % every time player purchases an upgrade
 -- [] add main door with minimum damage requirement to take damage
@@ -134,6 +134,7 @@ function _init()
 	cls()
 	player = init_object(player_type, 64, 64)
 	start_room_transition(0,0)
+	make_enemy_spawn_point(56, 64)
 	update_fn = game_update
 end
 
@@ -202,22 +203,22 @@ end
 
 player_type = {
 	init=function(this)
-		this.fire_rate = 10
+		this.fire_rate = 20
 		this.fire_timer = 0
 		this.hitbox={x=2,y=2,w=3,h=4}
 		this.target=nil
 		this.auto_target_radius = 40
 		this.projectil_damage = 1
 		this.projectile_speed = 1.3
-		this.ricochet = false
+		this.has_ricochet = false
+		this.has_pierce = false
 		this.face = {x=1,y=0}
 		this.max_hp = 10
 		this.hp = this.max_hp
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
-		this.level = 1
-		this.max_gems = 50
+		this.max_gems = 100
 		this.gems = 0
 		this.dead = false
 	end,
@@ -284,7 +285,8 @@ player_type = {
 				dir.y = 1
 			end
 			local proj = make_projectile(this.x, this.y, make_animation({30,31}, 4), this.projectil_damage, this.projectile_speed, dir)
-			proj.ricochet = this.ricochet
+			proj.ricochet = this.has_ricochet
+			proj.pierce = this.has_pierce
 			add(proj.collision_groups, ENEMY_GROUP)
 		end
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
@@ -353,9 +355,9 @@ upgrade_fire_rate = {
 	name = "fast-shot",
 	description = "increase rate of fire.",
 	cost = 200,
-	persist = false,
+	persist = true,
 	on_upgrade = function()
-		player.fire_rate = 10
+		player.fire_rate = clamp(player.fire_rate - 1, 8, 100)
 		player.fire_timer = 0
 	end
 }
@@ -367,7 +369,7 @@ upgrade_projectile_ricochet = {
 	cost = 500,
 	persist = false,
 	on_upgrade = function()
-		player.ricochet = true
+		player.has_ricochet = true
 	end
 }
 
@@ -389,7 +391,7 @@ upgrade_projectile_pierce = {
 	cost = 1000,
 	persist = false,
 	on_upgrade = function()
-		player.pierce = true
+		player.has_pierce = true
 	end
 }
 
@@ -411,7 +413,7 @@ function show_vendor_window(vendor_obj)
 				end
 				if not upgrade.persist then
 					del(vendor_obj.inventory, upgrade)
-					clamp(this.selected_upgrade, 1, count(vendor_obj.inventory))
+					this.selected_upgrade = clamp(this.selected_upgrade, 1, count(vendor_obj.inventory))
 				end
 				sfx(11)
 				player.gems -= upgrade.cost
@@ -523,6 +525,8 @@ projectile_type = {
 		this.collision_groups = {}
 		this.damage = 1
 		this.ricochet = false
+		this.pierce = false
+		this.hit_list = {}
 	end,
 	update=function(this)
 		this.lifetime -= 1
@@ -534,15 +538,19 @@ projectile_type = {
 			return
 		end
 		local col = this.collide(this.collision_groups)
-		if col ~= nil then
+		if col ~= nil and index_of(this.hit_list, col) == 0 then
 			if col.take_damage ~= nil then
 				col.take_damage(this.damage)
+				add(this.hit_list, col)
 			end
-			destroy_object(this)
+			if not this.pierce then
+				destroy_object(this)
+			end
 			return
 		end
 		if not this.can_move_to((nextx + TILE_HALF_SIZE)/TILE_SIZE, (nexty + TILE_HALF_SIZE)/TILE_SIZE) then
 			if this.ricochet then
+				this.hit_list = {}
 				-- cheap bounce calc without normals since all walls are axis-aligned (no need to calculate collision normals)
 				if not this.can_move_to((this.x + TILE_HALF_SIZE)/TILE_SIZE, (nexty + TILE_HALF_SIZE)/TILE_SIZE) then
 					-- hit top or bottom of wall so reverse y
@@ -613,7 +621,7 @@ bug_type = {
 		this.anim = make_animation({50,51}, 25)
 		this.threat = 1
 		this.group = ENEMY_GROUP
-		this.hp = 1
+		this.hp = 2
 		this.move_rate=15
 		this.move_timer=0
 		this.touch_damage = 2
