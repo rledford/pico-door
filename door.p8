@@ -184,6 +184,7 @@ function _draw()
 		end
 	end
 	draw_ui()
+	-- print(tostring(difficulty), 0,16,8)
 end
 
 -- game update --
@@ -216,14 +217,15 @@ player_type = {
 		this.projectile_speed = 1.3
 		this.has_ricochet = false
 		this.has_pierce = false
+		this.has_overload = true
 		this.face = {x=1,y=0}
-		this.max_hp = 9999
+		this.max_hp = 10
 		this.hp = this.max_hp
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
-		this.max_gems = 9999
-		this.gems = 9999
+		this.max_gems = 250
+		this.gems = 250
 		this.dead = false
 	end,
 	take_damage=function(this, amt)
@@ -300,8 +302,8 @@ player_type = {
 					this.type.take_damage(this, obj.touch_damage)
 				elseif obj.on_pickup ~= nil then
 					obj.on_pickup(this)
-				elseif obj.type.on_activate ~= nil then
-					obj.type.on_activate(obj)
+				-- elseif obj.type.on_activate ~= nil then
+				-- 	obj.type.on_activate(obj)
 				end
 			end
 		end)
@@ -318,6 +320,7 @@ vendor_type = {
 			upgrade_max_hp,
 			upgrade_projectile_damage,
 			upgrade_fire_rate,
+			upgrade_overload,
 			upgrade_projectile_ricochet,
 			upgrade_projectile_pierce,
 		}
@@ -339,6 +342,7 @@ upgrade_max_gems = {
 	persist = true,
 	on_upgrade = function()
 		player.max_gems += 50
+		difficulty *= 1.05
 	end
 }
 
@@ -351,6 +355,7 @@ upgrade_max_hp = {
 	on_upgrade = function()
 		player.max_hp += 10
 		player.hp = player.max_hp
+		difficulty *= 1.05
 	end
 }
 
@@ -363,6 +368,7 @@ upgrade_fire_rate = {
 	on_upgrade = function()
 		player.fire_rate = 8
 		player.fire_timer = 0
+		difficulty *= 1.1
 	end
 }
 
@@ -374,6 +380,7 @@ upgrade_projectile_ricochet = {
 	persist = false,
 	on_upgrade = function()
 		player.has_ricochet = true
+		difficulty *= 1.1
 	end
 }
 
@@ -385,6 +392,7 @@ upgrade_projectile_damage = {
 	persist = true,
 	on_upgrade = function()
 		player.projectil_damage += 1
+		difficulty *= 1.1
 	end
 }
 
@@ -396,6 +404,18 @@ upgrade_projectile_pierce = {
 	persist = false,
 	on_upgrade = function()
 		player.has_pierce = true
+		difficulty *= 1.1
+	end
+}
+
+upgrade_overload = {
+	spr = 22,
+	name = "overload",
+	description = "spawn portal on full gems.",
+	cost = 750,
+	persist = false,
+	on_upgrade = function()
+		player.has_overload = true
 	end
 }
 
@@ -442,7 +462,7 @@ function show_vendor_window(vendor_obj)
 			print(hp_text, window_rect.right - text_w_px(hp_text) - pad/2, window_rect.top + pad/2 + 6, 2)
 			local itemx
 			for i=0,count(vendor_obj.inventory)-1 do
-				itemx = window_rect.left + 20 + TILE_SIZE * i + pad + (pad * i)
+				itemx = window_rect.left + 12 + TILE_SIZE * i + pad + (pad * i)
 				itemy = window_rect.top + pad*2 + TILE_SIZE
 				rectfill(itemx-1, itemy-1, itemx + TILE_SIZE, itemy + TILE_SIZE, 0)
 				spr(vendor_obj.inventory[i+1].spr, itemx, itemy)
@@ -505,6 +525,10 @@ function make_gems_pickup(x, y, amount)
 	local on_pickup = function(player)
 		player.gems = clamp(player.gems + amount, 0, player.max_gems)
 		destroy_object(pickup)
+		if player.gems == player.max_gems and player.has_overload then
+			local pos = get_open_pos_next_to(player.x, player.y)
+			init_object(portal_type, pos.x, pos.y)
+		end
 	end
 	pickup.hitbox={x=2,y=2,w=3,h=3}
 	pickup.on_pickup = on_pickup
@@ -603,7 +627,7 @@ eye_type = {
 		this.auto_target_radius=40
 		this.threat = 1
 		this.group = ENEMY_GROUP
-		this.hp = 1
+		this.hp = flr(1.5 * difficulty)
 		this.move_rate=30
 		this.move_timer=0
 		this.anim = make_animation({48,49}, 16)
@@ -635,7 +659,7 @@ bug_type = {
 		this.anim = make_animation({50,51}, 25)
 		this.threat = 1
 		this.group = ENEMY_GROUP
-		this.hp = 2
+		this.hp = flr(3 * difficulty)
 		this.move_rate=15
 		this.move_timer=0
 		this.touch_damage = 2
@@ -658,7 +682,7 @@ fang_type = {
 		this.anim = make_animation({53,54}, 40)
 		this.threat = 1
 		this.group = ENEMY_GROUP
-		this.hp = 1
+		this.hp = flr(2 * difficulty)
 		this.move_rate=5
 		this.move_timer=0
 		this.touch_damage = 2
@@ -683,7 +707,7 @@ skull_type = {
 		this.anim = make_animation({55,56}, 30)
 		this.threat = 1
 		this.group = ENEMY_GROUP
-		this.hp = 2
+		this.hp = flr(4 * difficulty)
 		this.move_rate=5
 		this.move_timer=0
 		this.touch_damage = 1
@@ -873,8 +897,14 @@ portal_type = {
 		this.current_frame = 1
 		this.frame_time = 0
 		this.frame_step = 1
+		this.on_activate = function()
+			start_portal_transition(this)
+		end
 	end,
 	update=function(this)
+		if player ~= nil and not player.dead and btnp(k_action) and player.x == this.x and player.y == this.y then
+			this.on_activate()
+		end
 		this.frame_time += 1
 		if this.frame_time >= this.frame_times[this.current_frame] then
 			this.frame_time = 0
@@ -887,9 +917,6 @@ portal_type = {
 			end
 			this.current_frame += this.frame_step
 		end
-	end,
-	on_activate=function(this)
-		start_portal_transition(this)
 	end,
 	draw=function(this)
 		spr(this.frames[this.current_frame], this.x, this.y, 1, 1, this.frame_step == -1)
@@ -1044,9 +1071,9 @@ function init_object(type,x,y)
 				-- which should handle spawning pickups
 				if obj.type ~= player_type then
 					if rnd(1000) > 900 then
-						make_hp_pickup(obj.x,obj.y,flr(rnd(10) + 1))
+						make_hp_pickup(obj.x,obj.y,flr((rnd(3) + 1)) * difficulty)
 					elseif rnd(1000) > 100 then
-						make_gems_pickup(obj.x,obj.y,flr(rnd(10)) + 1)
+						make_gems_pickup(obj.x,obj.y,flr((rnd(5) + 3) * difficulty))
 					end
 					sfx(4)
 				end
@@ -1312,6 +1339,9 @@ function draw_object(obj)
 	if debug then
 		rect(obj.x+obj.hitbox.x,obj.y+obj.hitbox.y,obj.x+obj.hitbox.x+obj.hitbox.w-1,obj.y+obj.hitbox.y+obj.hitbox.h-1,8)
 	end
+	-- if obj.hp and obj ~= player then
+	-- 	print(tostring(obj.hp), obj.x, obj.y, 8)
+	-- end
 end
 
 function draw_particles()
