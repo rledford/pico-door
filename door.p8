@@ -200,22 +200,22 @@ function _draw()
 	if window ~= nil then
 		window.draw(window)
 	end
-	if debug then
-		print("mem kb: "..stat(0),  camera_pos.x + 1, camera_pos.y + 1 + 8, 8)
-		print("player x: "..player.x, camera_pos.x + 1, camera_pos.y + 1 + 16, 8)
-		print("player y: "..player.y, camera_pos.x + 1, camera_pos.y + 1 + 24, 8)
-		print("objects: "..count(objects), camera_pos.x + 1, camera_pos.y + 1 + 32, 8)
-		print("transition objects: "..count(transition_objects), camera_pos.x + 1, camera_pos.y + 1 + 48, 8)
-		if player.target ~= nil then
-			local range = get_range(player, player.target)
-			print("target rng: "..flr(range), camera_pos.x + 1, camera_pos.y + 1 + 40, 8)
-			circ(player.x + 4, player.y + 4, range)
-		else
-			circ(player.x + 4, player.y + 4, player.auto_target_radius, 8)
-		end
-	end
-	draw_ui()
+	-- if debug then
+	-- 	print("mem kb: "..stat(0),  camera_pos.x + 1, camera_pos.y + 1 + 8, 8)
+	-- 	print("player x: "..player.x, camera_pos.x + 1, camera_pos.y + 1 + 16, 8)
+	-- 	print("player y: "..player.y, camera_pos.x + 1, camera_pos.y + 1 + 24, 8)
+	-- 	print("objects: "..count(objects), camera_pos.x + 1, camera_pos.y + 1 + 32, 8)
+	-- 	print("transition objects: "..count(transition_objects), camera_pos.x + 1, camera_pos.y + 1 + 48, 8)
+	-- 	if player.target ~= nil then
+	-- 		local range = get_range(player, player.target)
+	-- 		print("target rng: "..flr(range), camera_pos.x + 1, camera_pos.y + 1 + 40, 8)
+	-- 		circ(player.x + 4, player.y + 4, range)
+	-- 	else
+	-- 		circ(player.x + 4, player.y + 4, player.auto_target_radius, 8)
+	-- 	end
+	-- end
 	-- print(tostring(difficulty), 0,16,8)
+	draw_ui()
 end
 
 -- game update --
@@ -989,14 +989,15 @@ torch_type = {
 
 portal_type = {
 	init=function(this)
-		this.frames = {21,22,23,24}
-		this.frame_times = {15,15,15,15}
-		this.current_frame = 1
-		this.frame_time = 0
-		this.frame_step = 1
+		this.frames,
+		this.frame_times,
+		this.current_frame,
+		this.frame_time,
+		this.frame_step = {21,22,23,24},{15,15,15,15},1,0,1
 		this.on_interact = function()
 			start_portal_transition(this)
 		end
+		this.is_boss_portal = false
 	end,
 	update=function(this)
 		if player ~= nil and not player.dead and btnp(k_action) and player.x == this.x and player.y == this.y then
@@ -1485,14 +1486,13 @@ function start_room_transition(x_index, y_index)
 	end)
 
 	
-	is_room_transition = true
-	room.x = x_index
-	room.y = y_index
-	update_fn = update_room_transition
+	is_room_transition,
+	room.x,
+	room.y,
+	update_fn = true,x_index,y_index,update_room_transition
 
-	local tile_type
-	local tx = 0
-	local ty = 0
+	local tile_type,tx,ty = nil,0,0
+
 	for c=x_index*SCREEN_TILES,x_index*SCREEN_TILES+SCREEN_TILES-1 do
 		for r=y_index*SCREEN_TILES,y_index*SCREEN_TILES+SCREEN_TILES-1 do
 			tx = c*TILE_SIZE
@@ -1589,6 +1589,10 @@ function end_room_transition()
 			mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),transition_obj.spr)
 		end
 	end
+end
+
+function goto_boss_room()
+	-- init boss room objects
 end
 
 function start_portal_transition(portal)
