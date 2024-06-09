@@ -105,63 +105,59 @@ __lua__
 -- constants --
 ---------------
 
-TILE_SIZE = 8
+TILE_SIZE,
+SCREEN_SIZE,
+MAX_ROOM_OBJECTS = 8, 128, 50
 TILE_HALF_SIZE = TILE_SIZE/2
-SCREEN_SIZE = 128
 SCREEN_TILES = SCREEN_SIZE/TILE_SIZE
-MAX_ROOM_OBJECTS = 50
 
-NO_GROUP = 0
-PLAYER_GROUP = 1
-ENEMY_GROUP = 2
-BLOCK_TILE = 0
-WALL_TILE = 1
-FLOOR_TILE = 2
-DOOR_TILE = 3
-SPIKE_TILE = 4
-ENEMY_SPAWN_TILE = 6
-TRAP_TILE = 19
-PORTAL_TILE = 21
-VENDOR_TILE = 37
-GEM_TILE = 28
-HP_TILE = 27
-CHEST_TILE = 14
-CHECK_OPEN_TILE = 15
-TORCH_TILE = 57
-HURT_FLASH_PAL = {8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8}
-
-SATCHEL_TILE = 40
-UPGRADE_DMG_TILE = 41
-RICOCHET_TILE = 42
-UPGRADE_HP_TILE = 43
-FAST_SHOT_TILE = 44
-PIERCE_TILE = 45
-OVERLOAD_TILE = 22
-
+NO_GROUP,
+PLAYER_GROUP,
+ENEMY_GROUP,
+BLOCK_TILE,
+WALL_TILE,
+FLOOR_TILE,
+DOOR_TILE,
+SPIKE_TILE,
+ENEMY_SPAWN_TILE,
+TRAP_TILE,
+PORTAL_TILE,
+VENDOR_TILE,
+GEM_TILE,
+HP_TILE,
+CHEST_TILE,
+TORCH_TILE,
+SATCHEL_TILE,
+UPGRADE_DMG_TILE,
+RICOCHET_TILE,
+UPGRADE_HP_TILE,
+FAST_SHOT_TILE,
+PIERCE_TILE,
+OVERLOAD_TILE,
+HURT_FLASH_PAL = 0,1,2,0,1,2,3,4,6,19,21,37,28,27,14,57,40,41,42,43,44,45,22,{8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8}
 
 -- globals --
 -------------
 
-room = {x=0,y=0}
-overload_portal = nil
-last_portal_used = {room={x=0,y=0},pos={0,0}}
-camera_pos = {x=0,y=0}
-camera_spd = 4
-objects = {}
-transition_objects = {}
-types = {}
-difficulty = 1.0
+room,
+overload_portal,
+last_portal_used,
+camera_pos,
+camera_spd,
+objects,
+transition_objects,
+types,
+difficulty = {x=0,y=0},nil,{room={x=0,y=0},pos={0,0}},{x=0,y=0},4,{},{},{},1.0
 
-k_left = 0
-k_right = 1
-k_up = 2
-k_down = 3
-k_shoot = 4
-k_action = 5
-is_room_transition = false
-debug=false
-window = nil
-vendor = nil
+k_left,k_right
+,k_up
+,k_down
+,k_shoot
+,k_action
+,is_room_transition
+,debug
+,window
+,vendor = 0,1,2,3,4,5,false,false,nil,nil
 
 update_fn = function()
 end
