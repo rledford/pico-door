@@ -114,7 +114,6 @@ MAX_ROOM_OBJECTS = 50
 NO_GROUP = 0
 PLAYER_GROUP = 1
 ENEMY_GROUP = 2
-HURT_FLASH_PAL = {8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8}
 BLOCK_TILE = 0
 WALL_TILE = 1
 FLOOR_TILE = 2
@@ -129,6 +128,7 @@ HP_TILE = 27
 CHEST_TILE = 14
 CHECK_OPEN_TILE = 15
 TORCH_TILE = 57
+HURT_FLASH_PAL = {8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8}
 
 SATCHEL_TILE = 40
 UPGRADE_DMG_TILE = 41
@@ -248,7 +248,7 @@ player_type = {
 		this.hitbox={x=2,y=2,w=3,h=4}
 		this.target=nil
 		this.auto_target_radius = 40
-		this.projectil_damage = 1
+		this.projectil_damage = 50
 		this.projectile_speed = 1.3
 		this.has_ricochet = false
 		this.has_pierce = false
@@ -259,7 +259,7 @@ player_type = {
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
-		this.max_gems = 250
+		this.max_gems = 1
 		this.gems = 0
 		this.dead = false
 	end,
@@ -285,8 +285,7 @@ player_type = {
 			return
 		end
 		this.anim.update()
-		local dx = 0
-		local dy = 0
+		local dx,dy = 0,0
 		if btnp(k_left) then
 			dx = -1
 		elseif btnp(k_right) then
@@ -302,7 +301,7 @@ player_type = {
 			this.face.y = dy
 			local mx = dx * TILE_SIZE + from.x
 			local my = dy * TILE_SIZE + from.y
-			if this.can_move_to(mx/TILE_SIZE, my/TILE_SIZE) then
+			if this.can_move_to(pos_to_tile(mx), pos_to_tile(my)) then
 				add(this.moves, {x=mx,y=my})
 				if is_move_to_next_room(mx,my) then
 					start_room_transition(room.x + dx, room.y + dy)
@@ -337,8 +336,8 @@ player_type = {
 					this.type.take_damage(this, obj.touch_damage)
 				elseif obj.on_pickup ~= nil then
 					obj.on_pickup(this)
-				-- elseif obj.type.on_activate ~= nil then
-				-- 	obj.type.on_activate(obj)
+				elseif obj.type.on_activate ~= nil then
+					obj.type.on_activate(obj)
 				end
 			end
 		end)
@@ -637,14 +636,14 @@ projectile_type = {
 			end
 			return
 		end
-		if not this.can_move_to((nextx + TILE_HALF_SIZE)/TILE_SIZE, (nexty + TILE_HALF_SIZE)/TILE_SIZE) then
+		if not this.can_move_to(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
 			if this.ricochet then
 				this.hit_list = {}
 				-- cheap bounce calc without normals since all walls are axis-aligned
-				if not this.can_move_to((this.x + TILE_HALF_SIZE)/TILE_SIZE, (nexty + TILE_HALF_SIZE)/TILE_SIZE) then
+				if not this.can_move_to(pos_to_tile(this.x + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
 					-- hit top or bottom of wall so reverse y
 					this.direction.y *= -1
-				elseif not this.can_move_to((nextx + TILE_HALF_SIZE)/TILE_SIZE, (this.y + TILE_HALF_SIZE)/TILE_SIZE) then
+				elseif not this.can_move_to(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(this.y + TILE_HALF_SIZE)) then
 					-- hit left or right of wall so reverse x
 					this.direction.x *= -1
 				end
@@ -682,7 +681,7 @@ chest_type = {
 		start_hurt_object(this)
 		if this.hp <= 0 then
 			--play destroy sound
-			mset(this.x/TILE_SIZE,this.y/TILE_SIZE, FLOOR_TILE)
+			mset(pos_to_tile(this.x), pos_to_tile(this.y), FLOOR_TILE)
 			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame])
 			destroy_object(this)
 		else
@@ -826,7 +825,7 @@ door_type = {
 		start_hurt_object(this)
 		if this.hp <= 0 then
 			--play destroy sound
-			mset(this.x/TILE_SIZE,this.y/TILE_SIZE, FLOOR_TILE)
+			mset(pos_to_tile(this.x), pos_to_tile(this.y), FLOOR_TILE)
 			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame])
 			destroy_object(this)
 		else
@@ -999,13 +998,13 @@ portal_type = {
 		this.current_frame = 1
 		this.frame_time = 0
 		this.frame_step = 1
-		this.on_activate = function()
+		this.on_interact = function()
 			start_portal_transition(this)
 		end
 	end,
 	update=function(this)
 		if player ~= nil and not player.dead and btnp(k_action) and player.x == this.x and player.y == this.y then
-			this.on_activate()
+			this.on_interact()
 		end
 		this.frame_time += 1
 		if this.frame_time >= this.frame_times[this.current_frame] then
@@ -1200,10 +1199,8 @@ function init_object(type,x,y)
 
 
 	obj.find_target_in_group = function(group)
-		local group = group or NO_GROUP
-		local other = nil
-		local range = 0
-		local target = {obj = nil, range = 0}
+		local group,other,range,target = group or NO_GROUP, nil, 0, {obj = nil, range = 0}
+
 		for i=1,count(objects) do
 			other = objects[i]
 			if obj ~= other and other.targetable and other.group == group then
@@ -1264,15 +1261,13 @@ function add_random_move(obj)
 	if count(obj.moves) ~= 0 then
 		return
 	end
-	local possible_moves = {}
-	local mx = 0
-	local my = 0
+	local possible_moves,mx,my = {},0,0
 	for dx=-1,1 do
 		for dy=-1,1 do
 			if (dx == 0 and dy ~= 0) or (dy == 0 and dx ~= 0) then
 				mx = dx * TILE_SIZE + obj.x
 				my = dy * TILE_SIZE + obj.y
-				if obj.can_move_to(mx/TILE_SIZE,my/TILE_SIZE) and not is_move_to_next_room(mx,my) then
+				if obj.can_move_to(pos_to_tile(mx),pos_to_tile(my)) and not is_move_to_next_room(mx,my) then
 					add(possible_moves, {x=mx,y=my})
 				end
 			end
@@ -1298,8 +1293,7 @@ function plan_next_move(obj)
 	if (m.x == 0 and m.y == 0) then
 		return
 	end
-	local dx = sign(m.x)
-	local dy = sign(m.y)
+	local dx,dy = sign(m.x), sign(m.y)
 	if dx ~= 0 and dy ~= 0 then
 		if rnd() > 0.5 then
 			dx = 0
@@ -1307,9 +1301,8 @@ function plan_next_move(obj)
 			dy = 0
 		end
 	end
-	local mx = dx * TILE_SIZE + obj.x
-	local my = dy * TILE_SIZE + obj.y
-	if (obj.can_move_to(mx/TILE_SIZE, my/TILE_SIZE)) then
+	local mx,my = dx * TILE_SIZE + obj.x, dy * TILE_SIZE + obj.y
+	if (obj.can_move_to(pos_to_tile(mx), pos_to_tile(my))) then
 		add(obj.moves, {x=mx, y=my})
 	end
 end
@@ -1379,31 +1372,28 @@ function make_particle_group(x,y,sprite,lifetime)
 	pgroup.init = function(x, y, sprite, lifetime)
 		pgroup.lifetime = lifetime or 80
 		if sprite ~= nil then
-			local col = flr(sprite % 16)
-			local row = flr(sprite / 16)
-			local p
+			local col,row,p = flr(sprite % 16),flr(sprite / 16)
 			for px=0,7 do
 				for py=0,7 do
 					p = pgroup.particles[px * 8 + py + 1]
-					p.x = x + px
-					p.y = y + py
-					p.spd = 0.4
-					p.dir.x = rnd() * (rnd() >= 0.5 and -1 or 1)
-					p.dir.y = rnd() * (rnd() >= 0.5 and -1 or 1)
-					p.color = sget(col * TILE_SIZE + px, row * TILE_SIZE + py)
+					p.x,
+					p.y,
+					p.spd,
+					p.dir.x,
+					p.dir.y,
+					p.color = x + px,y + py,0.4,rnd() * (rnd() >= 0.5 and -1 or 1),rnd() * (rnd() >= 0.5 and -1 or 1),sget(col * TILE_SIZE + px, row * TILE_SIZE + py)
 				end
 			end
 		else
-			local r = 6
-			local theta = 1
+			local r,theta = 6, 1
 			foreach(pgroup.particles, function(p)
-				theta = rnd() * 2 * 3.14
-				p.x = x + r * cos(theta)
-				p.y = y + r * sin(theta)
-				p.spd = 0.5
-				p.dir.x = rnd() > 0.5 and -rnd() or rnd()
-				p.dir.y = rnd() > 0.5 and -rnd() or rnd()
-				p.color = 8
+				theta,
+				p.x,
+				p.y,
+				p.spd,
+				p.dir.x,
+				p.dir.y,
+				p.color = rnd() * 2 * 3.14,x + r * cos(theta),y + r * sin(theta),0.5,rnd() > 0.5 and -rnd() or rnd(),rnd() > 0.5 and -rnd() or rnd(),8
 			end)
 		end
 	end
@@ -1568,8 +1558,7 @@ end
 
 function update_room_transition()
 	player.move()
-	local diffx = room.x * SCREEN_SIZE - camera_pos.x
-	local diffy = room.y * SCREEN_SIZE - camera_pos.y
+	local diffx,diffy = room.x * SCREEN_SIZE - camera_pos.x, room.y * SCREEN_SIZE - camera_pos.y
 
 	if diffx ~= 0 then
 		camera_pos.x += camera_spd * sign(diffx)
@@ -1593,15 +1582,15 @@ function end_room_transition()
 		transition_obj = transition_objects[i]
 		del(transition_objects, transition_obj)
 		if transition_obj.type == door_type then
-			mset(transition_obj.x/TILE_SIZE,transition_obj.y/TILE_SIZE,DOOR_TILE)
+			mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),DOOR_TILE)
 		elseif transition_obj.type == torch_type then
-			mset(transition_obj.x/TILE_SIZE,transition_obj.y/TILE_SIZE,TORCH_TILE)
+			mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),TORCH_TILE)
 		-- elseif transition_obj.type == portal_type then
-		-- 	mset(transition_obj.x/TILE_SIZE,transition_obj.y/TILE_SIZE,PORTAL_TILE)
+		-- 	mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),PORTAL_TILE)
 		elseif transition_obj.type == vendor_type then
-			mset(transition_obj.x/TILE_SIZE,transition_obj.y/TILE_SIZE,VENDOR_TILE)
+			mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),VENDOR_TILE)
 		elseif transition_obj.type == pickup_type and transition_obj.spr > 0 then
-			mset(transition_obj.x/TILE_SIZE,transition_obj.y/TILE_SIZE,transition_obj.spr)
+			mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),transition_obj.spr)
 		end
 	end
 end
@@ -1610,12 +1599,13 @@ function start_portal_transition(portal)
 	if room.x == 0 and room.y == 0 then
 		-- leaving main room
 		local open_pos = get_open_pos_next_to(last_portal_used.pos.x, last_portal_used.pos.y)
-		room.x = last_portal_used.room.x
-		room.y = last_portal_used.room.y
-		camera_pos.x = last_portal_used.room.x * 128
-		camera_pos.y = last_portal_used.room.y * 128
-		player.x = open_pos.x
-		player.y = open_pos.y
+		room.x,
+		room.y,
+		camera_pos.x,
+		camera_pos.y,
+		player.x,
+		player.y,
+		player.moves = last_portal_used.room.x,last_portal_used.room.y,last_portal_used.room.x * 128,last_portal_used.room.y * 128,open_pos.x,open_pos.y,{}
 		player.moves = {}
 		destroy_object(portal)
 		if overload_portal ~= nil then
@@ -1625,17 +1615,18 @@ function start_portal_transition(portal)
 		start_room_transition(room.x, room.y)
 	else
 		-- entering main room
-		last_portal_used.room.x = room.x
-		last_portal_used.room.y = room.y
-		last_portal_used.pos.x = portal.x
-		last_portal_used.pos.y = portal.y
-		room.x = 0
-		room.y = 0
-		camera_pos.x = 0
-		camera_pos.y = 0
-		player.x = 64
-		player.y = 64
-		player.moves = {}
+		last_portal_used.room.x,
+		last_portal_used.room.y,
+		last_portal_used.pos.x,
+		last_portal_used.pos.y,
+		room.x,
+		room.y,
+		camera_pos.x,
+		camera_pos.y,
+		player.x,
+		player.y,
+		player.moves = room.x,room.y,portal.x,portal.y,0,0,0,0,64,64,{}
+
 		start_room_transition(room.x, room.y)
 		init_object(portal_type, 56, 64)
 	end
@@ -1693,13 +1684,17 @@ death_window = {
 -- utils --
 -----------
 
+function pos_to_tile(v)
+	return v/TILE_SIZE
+end
+
 function text_w_px(text)
 	return #text * 4 - 1
 end
 
 function get_open_pos_next_to(x, y)
-	local c = flr(x/TILE_SIZE)
-	local r = flr(y/TILE_SIZE)
+	local c = flr(pos_to_tile(x))
+	local r = flr(pos_to_tile(y))
 	if fget(mget(c+1,r)) == 0 then
 		return {x=x+TILE_SIZE,y=y}
 	elseif fget(mget(c,r+1)) == 0 then
@@ -1751,8 +1746,7 @@ function index_of(tbl, value)
 end
 
 function get_direction(pos,dest)
-	local dx = dest.x - pos.x
-	local dy = dest.y - pos.y
+	local dx,dy = dest.x - pos.x,dest.y - pos.y
 	local norm = sqrt(dx^2 + dy^2)
 	return {x=dx/norm, y=dy/norm}
 end
