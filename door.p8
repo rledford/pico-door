@@ -107,9 +107,9 @@ __lua__
 
 TILE_SIZE,
 SCREEN_SIZE,
-MAX_ROOM_OBJECTS = 8, 128, 50
-TILE_HALF_SIZE = TILE_SIZE/2
-SCREEN_TILES = SCREEN_SIZE/TILE_SIZE
+MAX_ROOM_OBJECTS,
+TILE_HALF_SIZE,
+SCREEN_TILES = 8, 128, 50, 4, 16
 
 NO_GROUP,
 PLAYER_GROUP,
@@ -149,15 +149,16 @@ transition_objects,
 types,
 difficulty = {x=0,y=0},nil,{room={x=0,y=0},pos={0,0}},{x=0,y=0},4,{},{},{},1.0
 
-k_left,k_right
-,k_up
-,k_down
-,k_shoot
-,k_action
-,is_room_transition
-,debug
-,window
-,vendor = 0,1,2,3,4,5,false,false,nil,nil
+k_left,
+k_right,
+k_up,
+k_down,
+k_shoot,
+k_action,
+is_room_transition,
+debug,
+window,
+vendor = 0,1,2,3,4,5,false,false,nil,nil
 
 update_fn = function()
 end
@@ -293,10 +294,8 @@ player_type = {
 		end
 		if dx ~= 0 or dy ~= 0 then
 			local from = count(this.moves) and this.moves[#this.moves] or {x=this.x,y=this.y}
-			this.face.x = dx
-			this.face.y = dy
-			local mx = dx * TILE_SIZE + from.x
-			local my = dy * TILE_SIZE + from.y
+			this.face.x,this.face.y = dx,dy
+			local mx,my = dx * TILE_SIZE + from.x, dy * TILE_SIZE + from.y
 			if this.can_move_to(pos_to_tile(mx), pos_to_tile(my)) then
 				add(this.moves, {x=mx,y=my})
 				if is_move_to_next_room(mx,my) then
@@ -482,8 +481,10 @@ function show_vendor_window(vendor_obj)
 			local window_rect,
 			pad,
 			gems_text,
-			hp_text = {left=camera_pos.x + 8, top=camera_pos.y+40, right=camera_pos.x + 119, bottom=camera_pos.y + 91},
-			4,tostring(player.gems).."/"..tostring(player.max_gems),
+			hp_text = {left=camera_pos.x + 8, top=camera_pos.y+40,
+			right=camera_pos.x + 119, bottom=camera_pos.y + 91},
+			4,
+			tostring(player.gems).."/"..tostring(player.max_gems),
 			tostring(player.hp).."/"..tostring(player.max_hp)
 
 			rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 13)
@@ -551,14 +552,16 @@ pickup_type = {
 
 function make_pickup(x, y, anim, pickup_range)
 	local pickup = init_object(pickup_type, x, y)
-	pickup.pickup_range = pickup_range or 0
-	pickup.anim = anim
+	pickup.pickup_range,
+	pickup.anim = pickup_range or 0,anim
 	return pickup
 end
 
 function make_gems_pickup(x, y, amount)
 	local pickup = make_pickup(x, y, make_animation({28,29}, 10), 18)
-	local on_pickup = function(player)
+	pickup.hitbox,
+	pickup.on_pickup={x=2,y=2,w=3,h=3},
+	function(player)
 		player.gems = clamp(player.gems + amount, 0, player.max_gems)
 		destroy_object(pickup)
 		if player.gems == player.max_gems and player.has_overload and overload_portal == nil then
@@ -566,33 +569,31 @@ function make_gems_pickup(x, y, amount)
 			overload_portal = init_object(portal_type, pos.x, pos.y)
 		end
 	end
-	pickup.hitbox={x=2,y=2,w=3,h=3}
-	pickup.on_pickup = on_pickup
 	return pickup
 end
 
 function make_hp_pickup(x, y, amount)
 	local pickup = make_pickup(x, y, make_animation({26,27}, 16), 10)
-	local on_pickup = function(player)
+	pickup.hitbox,
+	pickup.on_pickup = {x=2,y=2,w=3,h=3},
+	function(player)
 		player.hp = clamp(player.hp + amount, player.hp, player.max_hp)
 		destroy_object(pickup)
 	end
-	pickup.hitbox={x=2,y=2,w=3,h=3}
-	pickup.on_pickup = on_pickup
 	return pickup
 end
 
 function make_upgrade_pickup(x, y, type)
 	local pickup = make_pickup(x, y, make_animation({type.spr}), 0)
-	local on_pickup = function()
+	pickup.spr,
+	pickup.can_expire,
+	pickup.hitbox,
+	pickup.on_pickup = type.spr,false,{x=2,y=2,w=3,h=3},
+	function()
 		type.on_upgrade()
 		sfx(11)
 		destroy_object(pickup)
 	end
-	pickup.spr = type.spr
-	pickup.can_expire = false
-	pickup.hitbox={x=2,y=2,w=3,h=3}
-	pickup.on_pickup = on_pickup
 	return pickup
 end
 
@@ -604,7 +605,6 @@ projectile_type = {
 		this.targetable,
 		this.target,
 		this.hitbox,
-		this.threat,
 		this.spd,
 		this.direction,
 		this.lifetime,
@@ -612,7 +612,7 @@ projectile_type = {
 		this.damage,
 		this.ricochet,
 		this.pierce,
-		this.hit_list = false,nil,{x=3,y=3,w=2,h=2},-1,0,{x=0, y=0},120,{},1,false,false,{}
+		this.hit_list = false,nil,{x=3,y=3,w=2,h=2},0,{x=0, y=0},120,{},1,false,false,{}
 	end,
 	update=function(this)
 		this.lifetime -= 1
@@ -696,17 +696,16 @@ moose_type = {
 
 eye_type = {
 	init=function(this)
-		this.fire_rate=90
-		this.fire_timer=0
-		this.hitbox={x=2,y=3,w=4,h=5}
-		this.target=nil
-		this.auto_target_radius=40
-		this.threat = 1
-		this.group = ENEMY_GROUP
-		this.hp = flr(1.5 * difficulty)
-		this.move_rate=30
-		this.move_timer=0
-		this.anim = make_animation({48,49}, 16)
+		this.fire_rate,
+		this.fire_timer,
+		this.hitbox,
+		this.target,
+		this.auto_target_radius,
+		this.group,
+		this.hp,
+		this.move_rate,
+		this.move_timer,
+		this.anim=90,0,{x=2,y=3,w=4,h=5},nil,40,ENEMY_GROUP,flr(1.5 * difficulty),30,0,make_animation({48,49}, 16)
 	end,
 	update=function(this)
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
@@ -729,16 +728,15 @@ eye_type = {
 
 bug_type = {
 	init=function(this)
-		this.hitbox={x=1,y=2,w=6,h=5}
-		this.target=nil
-		this.auto_target_radius=40
-		this.anim = make_animation({50,51}, 25)
-		this.threat = 1
-		this.group = ENEMY_GROUP
-		this.hp = flr(3 * difficulty)
-		this.move_rate=15
-		this.move_timer=0
-		this.touch_damage = 2
+		this.hitbox,
+		this.target,
+		this.auto_target_radius,
+		this.anim,
+		this.group,
+		this.hp,
+		this.move_rate,
+		this.move_timer,
+		this.touch_damage={x=1,y=2,w=6,h=5},nil,40,make_animation({50,51}, 25),ENEMY_GROUP,flr(3 * difficulty),15,0,2
 	end,
 	update=function(this)
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
@@ -752,16 +750,15 @@ bug_type = {
 
 fang_type = {
 	init=function(this)
-		this.hitbox={x=1,y=2,w=6,h=5}
-		this.target=nil
-		this.auto_target_radius=40
-		this.anim = make_animation({53,54}, 40)
-		this.threat = 1
-		this.group = ENEMY_GROUP
-		this.hp = flr(2 * difficulty)
-		this.move_rate=5
-		this.move_timer=0
-		this.touch_damage = 2
+		this.hitbox,
+		this.target,
+		this.auto_target_radius,
+		this.anim,
+		this.group,
+		this.hp,
+		this.move_rate,
+		this.move_timer,
+		this.touch_damage={x=1,y=2,w=6,h=5},nil,40,make_animation({53,54}, 40),ENEMY_GROUP,flr(2 * difficulty),5,0,2
 	end,
 	update=function(this)
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
@@ -775,18 +772,17 @@ fang_type = {
 
 skull_type = {
 	init=function(this)
-		this.fire_rate=45
-		this.fire_timer=0
-		this.hitbox={x=1,y=2,w=6,h=5}
-		this.target=nil
-		this.auto_target_radius=40
-		this.anim = make_animation({55,56}, 30)
-		this.threat = 1
-		this.group = ENEMY_GROUP
-		this.hp = flr(4 * difficulty)
-		this.move_rate=5
-		this.move_timer=0
-		this.touch_damage = 1
+		this.fire_rate,
+		this.fire_timer,
+		this.hitbox,
+		this.target,
+		this.auto_target_radius,
+		this.anim,
+		this.group,
+		this.hp,
+		this.move_rate,
+		this.move_timer,
+		this.touch_damage=45,0,{x=1,y=2,w=6,h=5},nil,40,make_animation({55,56}, 30),ENEMY_GROUP,flr(4 * difficulty),5,0,1
 	end,
 	update=function(this)
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
@@ -831,16 +827,17 @@ door_type = {
 
 trap_type = {
 	init=function(this)
-		this.inactive_anim = make_animation({19})
-		this.active_anim = make_animation({20})
+		this.inactive_anim,
+		this.active_anim,
+		this.reset_time,
+		this.reset_timer,
+		this.targetable,
+		this.active,
+		this.collidable,
+		this.projectil_damage,
+		this.projectile_speed = make_animation({19}),make_animation({20}),300,0,false,false,true,1,1
+
 		this.anim = this.inactive_anim
-		this.reset_time = 300
-		this.reset_timer = 0
-		this.targetable = false
-		this.active = false
-		this.collidable = true
-		this.projectil_damage = 1
-		this.projectile_speed = 1
 	end,
 	update=function(this)
 		if this.active and this.reset_timer > 0 then
@@ -858,14 +855,14 @@ trap_type = {
 		this.active = true
 		this.reset_timer = this.reset_time
 		this.anim = this.active_anim
-		local col = flr(this.x / TILE_SIZE)
-		local row = flr(this.y / TILE_SIZE)
-		local walls = {top=false,right=false,bottom=false,left=false}
-		local mincol = flr((room.x * SCREEN_SIZE) / TILE_SIZE)
-		local maxcol = flr((room.x * SCREEN_SIZE + SCREEN_SIZE - 1) / TILE_SIZE)
-		local minrow = flr((room.y * SCREEN_SIZE) / TILE_SIZE)
-		local maxrow = flr((room.y * SCREEN_SIZE + SCREEN_SIZE - 1) / TILE_SIZE)
-		local projectiles = {}
+		local col,row,walls,mincol,maxcol,minrow,maxrow,projectiles = flr(pos_to_tile(this.x)),
+			flr(pos_to_tile(this.y)),
+			{top=false,right=false,bottom=false,left=false},
+			flr(pos_to_tile(room.x * SCREEN_SIZE)),
+			flr(pos_to_tile(room.x * SCREEN_SIZE + SCREEN_SIZE - 1)),
+			flr(pos_to_tile(room.y * SCREEN_SIZE)),
+			flr(pos_to_tile(room.y * SCREEN_SIZE + SCREEN_SIZE - 1)),
+			{}
 		-- yes this for-loop is terrible
 		for offset=0,15 do
 			if col - offset >= mincol and not walls.left then
@@ -922,17 +919,17 @@ trap_type = {
 
 spike_type = {
 	init=function(this)
-		this.hitbox = {x=1,y=1,w=6,h=6}
-		this.frames = {16,17,18}
-		this.frame_times = {5,5,100}
-		this.current_frame = 1
-		this.frame_time = 0
-		this.frame_step = 1
-		this.reset_time = 100
-		this.reset_timer = 0
-		this.touch_damage = 0
-		this.targetable = false
-		this.collidable = true
+		this.hitbox,
+		this.frames,
+		this.frame_times,
+		this.current_frame,
+		this.frame_time,
+		this.frame_step,
+		this.reset_time,
+		this.reset_timer,
+		this.touch_damage,
+		this.targetable,
+		this.collidable = {x=1,y=1,w=6,h=6},{16,17,18},{5,5,100},1,0,1,100,0,0,false,true
 	end,
 	update=function(this)
 		if this.reset_timer > 0 then
@@ -968,12 +965,11 @@ spike_type = {
 
 torch_type = {
 	init=function(this)
-		this.hitbox={x=1,y=2,w=6,h=5}
-		this.targetable = false
-		this.collidable = false
-		this.target=nil
-		this.anim = make_animation({57,58}, 6)
-		this.threat = 1
+		this.hitbox,
+		this.targetable,
+		this.collidable,
+		this.target,
+		this.anim={x=1,y=2,w=6,h=5},false,false,nil,make_animation({57,58}, 6)
 	end,
 	update=function(this)
 		this.anim.update() 
@@ -1023,22 +1019,22 @@ portal_type = {
 
 enemy_spawn_point_type = {
 	init=function(this)
-		this.enemy_types = {}
-		this.spawn_time = 0
-		this.spawn_timer = 0
-		this.spawn_duration = 60
-		this.spawn_duration_timer = 0
-		this.anim = make_animation({6})
-		this.spawn_anim = make_animation({7,8}, 8)
-		this.is_spawning = false
+		this.enemy_types,
+		this.spawn_time,
+		this.spawn_timer,
+		this.spawn_duration,
+		this.spawn_duration_timer,
+		this.anim,
+		this.spawn_anim,
+		this.is_spawning = {},0,0,60,0,make_animation({6}),make_animation({7,8}, 8),false
 	end,
 	update=function(this)
 		if not this.is_spawning then
 			this.spawn_timer -= 1
 			if this.spawn_timer <= 0 and count(objects) < MAX_ROOM_OBJECTS then
-				this.is_spawning = true
-				this.spawn_timer = this.spawn_time
-				this.spawn_duration_timer = this.spawn_duration
+				this.is_spawning,
+				this.spawn_timer,
+				this.spawn_duration_timer = true,this.spawn_time,this.spawn_duration
 			end
 		end
 		if this.is_spawning then
@@ -1066,8 +1062,7 @@ enemy_spawn_point_type = {
 function make_enemy_spawn_point(x, y)
 	local spawn_time = flr(1/difficulty * 100)
 	sp = init_object(enemy_spawn_point_type, x, y)
-	sp.spawn_time = spawn_time
-	sp.spawn_timer = spawn_time
+	sp.spawn_time,sp.spawn_timer = spawn_time,spawn_time
 	if difficulty <= 1.1 then
 		sp.enemy_types = {eye_type, bug_type}
 	elseif difficulty <= 1.5 then
@@ -1084,26 +1079,26 @@ end
 
 function init_object(type,x,y)
 	local obj = {}
-	obj.type = type
-	obj.collidable = true
-	obj.targetable = true
-	obj.flip = {x=false,y=false}
-	obj.x = x
-	obj.y = y
-	obj.hitbox = {x=0,y=0,w=TILE_SIZE,h=TILE_SIZE}
-	obj.spd = 1
-	obj.moves = {}
-	obj.threat = 0
-	obj.group = NO_GROUP
-	obj.hp = 1
-	obj.msg = "none"
-	obj.anim = nil
-	obj.is_hurt = false
-	obj.hurt_duration = 30
-	obj.hurt_duration_timer = 0
-	obj.hurt_collidable = true
-	obj.touch_damage = 0
-	obj.ricochet = false
+
+	obj.type,obj.collidable,obj.targetable,obj.flip,obj.x,obj.y,obj.hitbox,obj.spd,
+	obj.moves,obj.group,obj.hp,obj.anim,obj.is_hurt,obj.hurt_duration,
+	obj.hurt_duration_timer,obj.hurt_collidable,obj.touch_damage=type,
+	true,
+	true,
+	{x=false,y=false},
+	x,
+	y,
+	{x=0,y=0,w=TILE_SIZE,h=TILE_SIZE},
+	1,
+	{},
+	NO_GROUP,
+	1,
+	nil,
+	false,
+	30,
+	0,
+	true,
+	0
 
 	obj.collide=function(groups)
 		local other
@@ -1238,9 +1233,9 @@ function move_object(obj)
 end
 
 function start_hurt_object(obj)
-	obj.is_hurt = true
-	obj.hurt_duration_timer = obj.hurt_duration
-	obj.collidable = obj.hurt_collidable
+	obj.is_hurt,
+	obj.hurt_duration_timer,
+	obj.collidable = true,obj.hurt_duration,obj.hurt_collidable
 end
 
 function update_hurt_object(obj)
@@ -1449,9 +1444,7 @@ function draw_ui()
 end
 
 function draw_hp_bar()
-	local pad = 1
-	local w = 31
-	local h = 2
+	local pad,w,h = 1,31,2
 	rectfill(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + w + pad, camera_pos.y + h + pad, 0)
 	rectfill(camera_pos.x + pad, camera_pos.y + pad, camera_pos.x + pad + flr(player.hp/player.max_hp*w), camera_pos.y + h + pad, 8)
 	if player.is_hurt and (player.hurt_duration_timer%4 == 0) then
@@ -1462,10 +1455,7 @@ function draw_hp_bar()
 end
 
 function draw_gems_bar()
-	local yoffset = 3
-	local pad = 1
-	local w = 31
-	local h = 2
+	local yoffset,pad,w,h = 3,1,31,2
 	rectfill(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + w + pad, camera_pos.y + h + pad + yoffset, 0)
 	rectfill(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + pad + flr(player.gems/player.max_gems*w), camera_pos.y + h + pad + yoffset, 11)
 	rect(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + w + pad, camera_pos.y + h + pad + yoffset, 7)
@@ -1475,6 +1465,11 @@ end
 -----------
 
 function start_room_transition(x_index, y_index)
+	if overload_portal ~= nil then
+		destroy_object(overload_portal)
+		overload_portal = nil
+	end
+	
 	foreach(objects, function(obj)
 		if obj.type ~= player_type then
 			add(transition_objects, obj)
@@ -1517,36 +1512,28 @@ function start_room_transition(x_index, y_index)
 					add(objects, vendor)
 				end
 			elseif tile_type == UPGRADE_HP_TILE then
-				mset(c, r, BLOCK_TILE)
-				make_upgrade_pickup(tx, ty, upgrade_max_hp)
-				init_object(chest_type, tx, ty)
+				place_upgrade_chest(c,r,tx,ty,upgrade_max_hp)
 			elseif tile_type == UPGRADE_DMG_TILE then
-				mset(c, r, BLOCK_TILE)
-				make_upgrade_pickup(tx, ty, upgrade_projectile_damage)
-				init_object(chest_type, tx, ty)
+				place_upgrade_chest(c,r,tx,ty,upgrade_projectile_damage)
 			elseif tile_type == RICOCHET_TILE then
-				mset(c, r, BLOCK_TILE)
-				make_upgrade_pickup(tx, ty, upgrade_projectile_ricochet)
-				init_object(chest_type, tx, ty)
+				place_upgrade_chest(c,r,tx,ty,upgrade_max_hp,upgrade_projectile_ricochet)
 			elseif tile_type == PIERCE_TILE then
-				mset(c, r, BLOCK_TILE)
-				make_upgrade_pickup(tx, ty, upgrade_projectile_pierce)
-				init_object(chest_type, tx, ty)
+				place_upgrade_chest(c,r,tx,ty,upgrade_projectile_pierce)
 			elseif tile_type == SATCHEL_TILE then
-				mset(c, r, BLOCK_TILE)
-				make_upgrade_pickup(tx, ty, upgrade_max_gems)
-				init_object(chest_type, tx, ty)
+				place_upgrade_chest(c,r,tx,ty,upgrade_max_gems)
 			elseif tile_type == FAST_SHOT_TILE then
-				mset(c, r, BLOCK_TILE)
-				make_upgrade_pickup(tx, ty, upgrade_fast_shot)
-				init_object(chest_type, tx, ty)
+				place_upgrade_chest(c,r,tx,ty,upgrade_fast_shot)
 			elseif tile_type == OVERLOAD_TILE then
-				mset(c, r, BLOCK_TILE)
-				make_upgrade_pickup(tx, ty, upgrade_overload)
-				init_object(chest_type, tx, ty)
+				place_upgrade_chest(c,r,tx,ty,upgrade_overload)
 			end
 		end
 	end
+end
+
+function place_upgrade_chest(c,r,x,y,upgrade_type)
+	mset(c, r, BLOCK_TILE)
+	make_upgrade_pickup(x, y, upgrade_type)
+	init_object(chest_type, x, y)
 end
 
 function update_room_transition()
@@ -1590,6 +1577,8 @@ end
 
 function goto_boss_room()
 	-- init boss room objects
+	-- set camera pos
+	-- set player pos
 end
 
 function start_portal_transition(portal)
@@ -1603,12 +1592,8 @@ function start_portal_transition(portal)
 		player.x,
 		player.y,
 		player.moves = last_portal_used.room.x,last_portal_used.room.y,last_portal_used.room.x * 128,last_portal_used.room.y * 128,open_pos.x,open_pos.y,{}
-		player.moves = {}
+
 		destroy_object(portal)
-		if overload_portal ~= nil then
-			destroy_object(overload_portal)
-			overload_portal = nil
-		end
 		start_room_transition(room.x, room.y)
 	else
 		-- entering main room
