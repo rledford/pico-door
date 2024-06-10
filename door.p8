@@ -479,10 +479,13 @@ function show_vendor_window(vendor_obj)
 			end
 		end,
 		draw = function(this)
-			local window_rect = {left=camera_pos.x + 8, top=camera_pos.y+40, right=camera_pos.x + 119, bottom=camera_pos.y + 91}
-			local pad = 4
-			local gems_text = tostring(player.gems).."/"..tostring(player.max_gems)
-			local hp_text = tostring(player.hp).."/"..tostring(player.max_hp)
+			local window_rect,
+			pad,
+			gems_text,
+			hp_text = {left=camera_pos.x + 8, top=camera_pos.y+40, right=camera_pos.x + 119, bottom=camera_pos.y + 91},
+			4,tostring(player.gems).."/"..tostring(player.max_gems),
+			tostring(player.hp).."/"..tostring(player.max_hp)
+
 			rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 13)
 			rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 2)
 			print("lunkik", window_rect.left + pad, window_rect.top + pad/2, 2)
@@ -500,9 +503,8 @@ function show_vendor_window(vendor_obj)
 					rect(itemx-2, itemy-2, itemx + TILE_SIZE + 1, itemy + TILE_SIZE + 1, 2)
 				end
 			end
-			local details_left = window_rect.left + pad
-			local details_top = window_rect.top + 29
-			local details_line_h = 8
+
+			local details_left,details_top,details_line_h = window_rect.left + pad,window_rect.top + 29,8
 
 			print(vendor_obj.inventory[this.selected_upgrade].name, details_left, details_top, 7)
 			print(vendor_obj.inventory[this.selected_upgrade].description, details_left, details_top + details_line_h)
@@ -522,11 +524,11 @@ end
 
 pickup_type = {
 	init=function(this)
-		this.spr = 0
-		this.pickup_range = 0
-		this.can_expire = true
-		this.expiration_time = 500
-		this.expiration_timer = this.expiration_time
+		this.spr,
+		this.pickup_range,
+		this.can_expire,
+		this.expiration_time,
+		this.expiration_timer = 0,0,true,500,500
 	end,
 	update=function(this)
 		if this.can_expire then
@@ -599,18 +601,18 @@ end
 
 projectile_type = {
 	init=function(this)
-		this.targetable = false
-		this.target = nil -- could implement homing
-		this.hitbox = {x=3,y=3,w=2,h=2}
-		this.threat = -1
-		this.spd = 0
-		this.direction = {x=0, y=0}
-		this.lifetime = 120
-		this.collision_groups = {}
-		this.damage = 1
-		this.ricochet = false
-		this.pierce = false
-		this.hit_list = {}
+		this.targetable,
+		this.target,
+		this.hitbox,
+		this.threat,
+		this.spd,
+		this.direction,
+		this.lifetime,
+		this.collision_groups,
+		this.damage,
+		this.ricochet,
+		this.pierce,
+		this.hit_list = false,nil,{x=3,y=3,w=2,h=2},-1,0,{x=0, y=0},120,{},1,false,false,{}
 	end,
 	update=function(this)
 		this.lifetime -= 1
@@ -656,10 +658,7 @@ projectile_type = {
 
 function make_projectile(x, y, anim, damage, spd, direction)
 	local proj = init_object(projectile_type, x, y)
-	proj.anim = anim
-	proj.damage = damage
-	proj.spd = spd
-	proj.direction = direction
+	proj.anim,proj.damage,proj.spd,proj.direction = anim,damage,spd,direction
 	return proj
 end
 
@@ -668,9 +667,7 @@ end
 
 chest_type = {
 	init=function(this)
-		this.group = ENEMY_GROUP
-		this.hp = 25
-		this.anim = make_animation({CHEST_TILE})
+		this.group,this.hp,this.anim = ENEMY_GROUP,25,make_animation({CHEST_TILE})
 	end,
 	take_damage=function(this, amount)
 		this.hp -= amount
