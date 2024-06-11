@@ -53,6 +53,7 @@ __lua__
 -- [x] increases difficulty by x % every time player purchases an upgrade
 -- [x] add chests with pickups
 -- [x] add torch object with animation
+-- [x] reduce tokens and make things look terrible
 -- [] add toast message when upgrade acquired in world (not vendor)
 -- [] add boss-door room in separate map area
 -- [] add boss-door health to UI
