@@ -135,7 +135,8 @@ UPGRADE_HP_TILE,
 FAST_SHOT_TILE,
 PIERCE_TILE,
 OVERLOAD_TILE,
-HURT_FLASH_PAL = 0,1,2,0,1,2,3,4,6,19,21,37,28,27,14,57,40,41,42,43,44,45,22,{8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8}
+BOSS_TILE,
+HURT_FLASH_PAL = 0,1,2,0,1,2,3,4,6,19,21,37,28,27,14,57,40,41,42,43,44,45,22,5,{8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8}
 
 -- globals --
 -------------
@@ -161,6 +162,8 @@ debug,
 window,
 vendor = 0,1,2,3,4,5,false,false,nil,nil
 
+boss_hp = 1000000
+
 update_fn = function()
 end
 
@@ -173,6 +176,7 @@ function _init()
 	start_room_transition(0,0)
 	init_object(moose_type, 64,64)
 	update_fn = game_update
+	goto_boss_room()
 end
 
 function _update60()
@@ -248,9 +252,9 @@ player_type = {
 		this.auto_target_radius = 40
 		this.projectil_damage = 50
 		this.projectile_speed = 1.3
-		this.has_ricochet = false
-		this.has_pierce = false
-		this.has_overload = false
+		this.has_ricochet = true
+		this.has_pierce = true
+		this.has_overload = true
 		this.face = {x=1,y=0}
 		this.max_hp = 10
 		this.hp = this.max_hp
@@ -635,14 +639,14 @@ projectile_type = {
 			end
 			return
 		end
-		if not this.can_move_to(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
+		if not this.can_move_through(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
 			if this.ricochet then
 				this.hit_list = {}
 				-- cheap bounce calc without normals since all walls are axis-aligned
-				if not this.can_move_to(pos_to_tile(this.x + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
+				if not this.can_move_through(pos_to_tile(this.x + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
 					-- hit top or bottom of wall so reverse y
 					this.direction.y *= -1
-				elseif not this.can_move_to(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(this.y + TILE_HALF_SIZE)) then
+				elseif not this.can_move_through(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(this.y + TILE_HALF_SIZE)) then
 					-- hit left or right of wall so reverse x
 					this.direction.x *= -1
 				end
@@ -1075,6 +1079,34 @@ function make_enemy_spawn_point(x, y)
 	return sp
 end
 
+-- boss door --
+---------------
+boss_door_type = {
+	init = function(this)
+		this.group,this.anim = ENEMY_GROUP,make_animation({BOSS_TILE})
+	end,
+	take_damage = function(this, amount)
+		boss_hp -= amount
+		if boss_hp <= 0 then
+			start_boss_defeated()
+		else
+			start_hurt_object(this)
+		end
+	end
+}
+
+function start_boss_defeated()
+	foreach(objects, function(obj)
+		if obj ~= player then
+			make_particle_group(obj.x,obj.y,BOSS_TILE,rnd(500))
+			destroy_object(obj)
+			mset(obj.x/TILE_SIZE,obj.y/TILE_SIZE,FLOOR_TILE)
+			if obj.type == boss_door_type then
+			end
+		end
+	end)
+end
+
 -- object functions --
 ----------------------
 
@@ -1140,6 +1172,11 @@ function init_object(type,x,y)
 
 	obj.can_move_to = function(x,y)
 		return fget(mget(x,y)) == 0
+	end
+
+	obj.can_move_through = function(x,y)
+		local t = mget(x,y)
+		return fget(t) == 0 or (fget(t,7))
 	end
 
 	obj.move_to = function(x,y)
@@ -1526,6 +1563,8 @@ function start_room_transition(x_index, y_index)
 				place_upgrade_chest(c,r,tx,ty,upgrade_fast_shot)
 			elseif tile_type == OVERLOAD_TILE then
 				place_upgrade_chest(c,r,tx,ty,upgrade_overload)
+			elseif tile_type == BOSS_TILE and room.x == 4 and room.y == 3 then
+				init_object(boss_door_type,tx,ty)
 			end
 		end
 	end
@@ -1577,9 +1616,16 @@ function end_room_transition()
 end
 
 function goto_boss_room()
-	-- init boss room objects
-	-- set camera pos
-	-- set player pos
+	room.x = 4
+	room.y = 3
+	camera_pos.x = 4*SCREEN_SIZE
+	camera_pos.y = 3*SCREEN_SIZE
+	player.x = 66 * TILE_SIZE
+	player.y = 50 * TILE_SIZE
+	MAX_ROOM_OBJECTS = 100
+	start_room_transition(room.x,room.y)
+	camera(camera_pos.x, camera_pos.y)
+	end_room_transition()
 end
 
 function start_portal_transition(portal)
@@ -1997,7 +2043,7 @@ __label__
 55555555555555555555555555555555555555555555555555555555666666666666666655555555555555555555555555555555555555555555555555555555
 
 __gff__
-0101000300010000000000000000010000000000000000000001000000000000000000000000000100000000000000000000000000000000000101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101000300810000000000000000010000000000000000000001000000000000000000000000000100000000000000000000000000000000000101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __map__
 0101010101010505050501010101010101010101010101010101010101010101010101010101010000000000000000000101010101010101010101010101010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
