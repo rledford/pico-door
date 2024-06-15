@@ -167,6 +167,7 @@ vendor = 0,1,2,3,4,5,false,false,nil,nil
 is_boss_room = false
 max_boss_hp = 100
 boss_hp = max_boss_hp
+toast_msg_window = nil
 
 update_fn = function()
 end
@@ -178,9 +179,21 @@ function _init()
 	cls()
 	player = init_object(player_type, 16, 40)
 	start_room_transition(0,0)
-	init_object(moose_type, 64,64)
 	update_fn = game_update
-	goto_boss_room()
+	show_toast_message({
+		"⬆️⬇️⬅️➡️ - move",
+		"      🅾️ - shoot",
+		"      ❎ - interact",
+		"",
+		"break down the doors. find",
+		"gems and items. buy upgrades",
+		"from that shady vendor.",
+		"",
+		"       don't get doid       ",
+		"",
+		"!! destroy that huge door !!"
+	}, 750)
+	-- goto_boss_room()
 end
 
 function _update60()
@@ -209,6 +222,9 @@ function _draw()
 	draw_particles()
 	if window ~= nil then
 		window.draw(window)
+	end
+	if toast_msg_window != nil then
+		toast_msg_window.draw(toast_msg_window)
 	end
 	-- if debug then
 	-- 	print("mem kb: "..stat(0),  camera_pos.x + 1, camera_pos.y + 1 + 8, 8)
@@ -242,6 +258,9 @@ function game_update()
 		obj.move()
 	end)
 	update_particles()
+	if toast_msg_window != nil then
+		toast_msg_window.update(toast_msg_window)
+	end
 end
 
 -- player --
@@ -360,9 +379,11 @@ vendor_type = {
 			upgrade_fast_shot,
 		}
 		this.anim = make_animation({37,38}, 20)
+		this.can_interact = false
 	end,
 	update=function(this)
-		if window == nil and player ~= nil and not player.dead and btnp(k_action) and flr(get_range(this, player)) <= TILE_SIZE*2 then
+		this.can_interact = window == nil and player ~= nil and not player.dead and flr(get_range(this, player)) <= TILE_SIZE*2
+		if this.can_interact and btnp(k_action) then
 			show_vendor_window(this)
 		end
 		this.anim.update()
@@ -458,6 +479,7 @@ upgrade_overload = {
 }
 
 function show_vendor_window(vendor_obj)
+	toast_msg_window = nil
 	sfx(8)
 	local win = {
 		selected_upgrade = 1,
@@ -527,6 +549,44 @@ function show_vendor_window(vendor_obj)
 		vendor_obj.type.update(vendor_obj)
 		window.update(window)
 	end
+end
+
+-- toast message --
+-------------------
+function show_toast_message(text_list,lifetime)
+	local line_count = count(text_list)
+	local tmp_w,w,h,pad,lifetime = 0,0,line_count * 4,2,lifetime or 600
+	foreach(text_list, function(msg)
+		tmp_w = text_w_px(msg)
+		if tmp_w > w then
+			w = tmp_w
+		end
+	end)
+	w += pad * 2
+	h += pad * 2 + line_count * 2
+	local toast = {
+		update=function(this)
+			lifetime -= 1
+			if lifetime <= 0 then
+				toast_msg_window = nil
+			end
+		end,
+		draw=function(this)
+			local left,top =
+				camera_pos.x + SCREEN_SIZE/2 - w/2,
+				camera_pos.y + SCREEN_SIZE - h + 1
+			local right,bottom =
+				left + w - 1,
+				top + h - 2
+
+			rectfill(left,top,right,bottom,13)
+			rect(left,top,right,bottom,2)
+			for i=1,line_count do
+				print(text_list[i],left + pad,(4+2) *(i-1) + top + pad,7)
+			end
+		end
+	}
+	toast_msg_window = toast
 end
 
 -- pickups --
@@ -601,6 +661,7 @@ function make_upgrade_pickup(x, y, type)
 	function()
 		type.on_upgrade()
 		sfx(11)
+		show_toast_message({type.name,"",type.description})
 		destroy_object(pickup)
 	end
 	return pickup
@@ -1038,7 +1099,8 @@ portal_type = {
 		this.is_boss_portal = false
 	end,
 	update=function(this)
-		if player ~= nil and not player.dead and btnp(k_action) and player.x == this.x and player.y == this.y then
+		this.can_interact = player ~= nil and not player.dead and player.x == this.x and player.y == this.y
+		if this.can_interact and btnp(k_action) then
 			this.on_interact()
 		end
 		this.frame_time += 1
@@ -1173,7 +1235,9 @@ function init_object(type,x,y)
 
 	obj.type,obj.collidable,obj.targetable,obj.flip,obj.x,obj.y,obj.hitbox,obj.spd,
 	obj.moves,obj.group,obj.hp,obj.anim,obj.is_hurt,obj.hurt_duration,
-	obj.hurt_duration_timer,obj.hurt_collidable,obj.static,obj.touch_damage=type,
+	obj.hurt_duration_timer,obj.hurt_collidable,obj.static,obj.touch_damage,
+	can_interact=
+	type,
 	true,
 	true,
 	{x=false,y=false},
@@ -1190,7 +1254,8 @@ function init_object(type,x,y)
 	0,
 	true,
 	false,
-	0
+	0,
+	false
 
 	obj.collide=function(groups)
 		local other
@@ -1513,6 +1578,9 @@ function draw_object(obj)
 		obj.type.draw(obj)
 	elseif obj.anim ~= nil then
 		obj.anim.draw(obj)
+	end
+	if obj.can_interact then
+		print("❎", obj.x,obj.y-6,12)
 	end
 	if debug then
 		rect(obj.x+obj.hitbox.x,obj.y+obj.hitbox.y,obj.x+obj.hitbox.x+obj.hitbox.w-1,obj.y+obj.hitbox.y+obj.hitbox.h-1,8)
@@ -2135,10 +2203,10 @@ __map__
 0102250201010105050501010100000001020202020202020202020102020201010104020402010000000000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0127272701010505050505010100000001020201020202020202020102020202020302040202010000000000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020239390505050505393901010101020601020202020202020102020201010104020402010000000000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020102020201010202020202010000000000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202160202020202020101020202020202020202020102020201010202020202010000000000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020202020202020202020102020201010202020202010101010000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 010202020202020202020202020202010102020202020202020202010202020101020206020202022b010000000000000102020202020202020202020202020100000000010101010101010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202021602020202020202020202020102060201010202020202020202010000000000000102020202020202020202020202020100000001010101013901010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020302020202020202020202020102060201010202020202020202010000000000000102020202020202020202020202020100000001010101013901010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020202020202020202020102020201010202020202020202010101010101010102020202020202020202020202020100000001013902020202023901010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020202020202020202020102020201010202020202020202020202020202010102020202020202020202020202020100000001010202020202020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020202020202020202020102020201010202020202020202020204020401010102020202020202020202020202020100000001010202022302020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
