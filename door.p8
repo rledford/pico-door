@@ -162,12 +162,18 @@ k_action,
 is_room_transition,
 debug,
 window,
-vendor = 0,1,2,3,4,5,false,false,nil,nil
+toast_msg_window,
+toast_msg_queue,
+vendor = 0,1,2,3,4,5,false,false,nil,nil,{}
 
-is_boss_room = false
+-- boss --
+----------
+is_all_powerful = false
+has_shown_is_all_powerful_msg = false
+has_started_boss_room = false
+has_attempted_artifact_activation = false
 max_boss_hp = 100
 boss_hp = max_boss_hp
-toast_msg_window = nil
 
 update_fn = function()
 end
@@ -261,6 +267,23 @@ function game_update()
 	update_particles()
 	if toast_msg_window != nil then
 		toast_msg_window.update(toast_msg_window)
+	elseif count(toast_msg_queue) > 0 then
+		toast_msg_window = toast_msg_queue[1]
+		del(toast_msg_queue, toast_msg_window)
+	end
+	if not is_all_powerful then
+		is_all_powerful = difficulty > 1.01
+		if is_all_powerful and not has_shown_is_all_powerful_msg then
+			show_toast_message({
+				"you're all powerful now...",
+				"activate the artifact and",
+				"destroy the door huge door",
+				"before it's too late.",
+				"",
+				"!! hurry !! <sqeal>"
+			},1000)
+			has_shown_is_all_powerful_msg = true
+		end
 	end
 end
 
@@ -588,7 +611,7 @@ function show_toast_message(text_list,lifetime)
 			end
 		end
 	}
-	toast_msg_window = toast
+	add(toast_msg_queue, toast)
 end
 
 -- pickups --
@@ -635,7 +658,7 @@ function make_gems_pickup(x, y, amount)
 	function(player)
 		player.gems = clamp(player.gems + amount, 0, player.max_gems)
 		destroy_object(pickup)
-		if not is_boss_room and player.gems == player.max_gems and player.has_overload and overload_portal == nil then
+		if not has_started_boss_room and player.gems == player.max_gems and player.has_overload and overload_portal == nil then
 			local pos = get_open_pos_next_to(flr(player.x / TILE_SIZE) * TILE_SIZE, flr(player.y / TILE_SIZE) * TILE_SIZE)
 			overload_portal = init_object(portal_type, pos.x, pos.y)
 		end
@@ -1084,6 +1107,25 @@ torch_type = {
 	end
 }
 
+-- artifact --
+--------------
+
+artifact_type = {
+	init=function(this)
+		this.anim,
+		this.can_interact =
+		make_animation({37,38}, 20),
+		false
+	end,
+	update=function(this)
+		this.can_interact = window == nil and player ~= nil and not player.dead and flr(get_range(this, player)) <= TILE_SIZE
+		if this.can_interact and btnp(k_action) then
+			has_attempted_artifact_activation = true
+		end
+		this.anim.update()
+	end,
+}
+
 
 -- portal --
 ------------
@@ -1326,7 +1368,7 @@ function init_object(type,x,y)
 				if obj.type ~= player_type then
 					if rnd(1000) > 900 then
 						make_hp_pickup(obj.x,obj.y,flr((rnd(3) + 1)) * difficulty)
-					elseif not is_boss_room and rnd(1000) > 100 then
+					elseif not has_started_boss_room and rnd(1000) > 100 then
 						make_gems_pickup(obj.x,obj.y,flr((rnd(5) + 3) * difficulty))
 					end
 					sfx(4)
@@ -1608,7 +1650,7 @@ function draw_ui()
 	end
 	draw_hp_bar()
 	draw_gems_bar()
-	if is_boss_room and boss_hp > 0 then
+	if has_started_boss_room and boss_hp > 0 then
 		draw_boss_hp_bar()
 	end
 end
@@ -1766,7 +1808,7 @@ end
 function goto_boss_room()
 	room.x = 4
 	room.y = 3
-	is_boss_room = true
+	has_started_boss_room = true
 	difficulty = 4
 	camera_pos.x = tile_to_screen(4)
 	camera_pos.y = tile_to_screen(3)
