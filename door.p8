@@ -170,13 +170,15 @@ toast_msg_queue,
 vendor = 0,1,2,3,4,5,false,false,nil,nil,{}
 
 -- stats --
+doors_destroyed,
 total_doors,
-total_enemies,
-total_chests = 0,0,0
+enemies_destroyed,
+chests_looted,
+total_chests = 0,0,0,0,0
 
 -- boss --
 ----------
-is_all_powerful = true
+is_all_powerful = false
 has_shown_is_all_powerful_msg = false
 has_started_boss_room = false
 has_attempted_artifact_activation = false
@@ -192,6 +194,7 @@ end
 function _init()
 	cls()
 	player = init_object(player_type, 16, 40)
+	calculate_stat_totals_from_map()
 	start_room_transition(0,0)
 	update_fn = game_update
 	show_toast_message({
@@ -199,14 +202,26 @@ function _init()
 		"      🅾️ - shoot",
 		"      ❎ - interact",
 		"",
-		"break down the doors. find",
-		"gems and items. buy upgrades",
-		"from that shady vendor.",
+		"break down the doors.",
+		"loot chest.",
+		"don't get doid",
 		"",
 		"!! destroy that huge door !!",
-		"       don't get doid       "
 	}, 750)
 	-- goto_boss_room()
+end
+
+function calculate_stat_totals_from_map()
+	for c=0,64,1 do
+		for r=0,48,1 do
+			if mget(c,r) == 3 then
+				total_doors += 1
+			end
+			if mget(c,r) >= 41 and mget(c,r) <= 45 then
+				total_chests += 1
+			end
+		end
+	end
 end
 
 function _update60()
@@ -278,14 +293,11 @@ function game_update()
 		del(toast_msg_queue, toast_msg_window)
 	end
 	if not is_all_powerful then
-		is_all_powerful = difficulty > 1.01
+		is_all_powerful = chests_looted == total_chests
 		if is_all_powerful and not has_shown_is_all_powerful_msg then
 			show_toast_message({
 				"you're all powerful now...",
-				"activate the artifact and",
-				"destroy the door huge door",
-				"before it's too late.",
-				"",
+				"get to the artifact.",
 				"!! hurry !! <sqeal>"
 			},700)
 			has_shown_is_all_powerful_msg = true
@@ -303,7 +315,7 @@ player_type = {
 		this.hitbox={x=2,y=2,w=3,h=4}
 		this.target=nil
 		this.auto_target_radius = 40
-		this.projectil_damage = 2
+		this.projectil_damage = 50
 		this.projectile_speed = 1.3
 		this.has_ricochet = false
 		this.has_pierce = false
@@ -314,8 +326,8 @@ player_type = {
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
-		this.max_gems = 250
-		this.gems = 0
+		-- this.max_gems = 250
+		-- this.gems = 0
 		this.dead = false
 	end,
 	take_damage=function(this, amt)
@@ -405,7 +417,7 @@ vendor_type = {
 		this.inventory,
 		this.anim,
 		this.can_interact = {
-			upgrade_max_gems,
+			-- upgrade_max_gems,
 			upgrade_max_hp,
 			upgrade_projectile_damage,
 			upgrade_fast_shot,
@@ -416,23 +428,28 @@ vendor_type = {
 	update=function(this)
 		this.can_interact = window == nil and player ~= nil and not player.dead and flr(get_range(this, player)) <= TILE_SIZE*2
 		if this.can_interact and btnp(k_action) then
-			show_vendor_window(this)
+			show_toast_message({
+				"i am the all powerful lunkik.",
+				"i used to be a vendor but i",
+				"required too many tokens..."
+			})
+			-- show_vendor_window(this)
 		end
 		this.anim.update()
 	end,
 }
 
-upgrade_max_gems = {
-	spr = SATCHEL_TILE,
-	name = "put the money in the bag",
-	description = "+50 to max gems",
-	cost = 50,
-	persist = true,
-	on_upgrade = function()
-		player.max_gems += 50
-		difficulty *= 1.05
-	end
-}
+-- upgrade_max_gems = {
+-- 	spr = SATCHEL_TILE,
+-- 	name = "put the money in the bag",
+-- 	description = "+50 to max gems",
+-- 	cost = 50,
+-- 	persist = true,
+-- 	on_upgrade = function()
+-- 		player.max_gems += 50
+-- 		difficulty *= 1.05
+-- 	end
+-- }
 
 upgrade_max_hp = {
 	spr = UPGRADE_HP_TILE,
@@ -499,93 +516,93 @@ upgrade_projectile_pierce = {
 	end
 }
 
-upgrade_overload = {
-	spr = OVERLOAD_TILE,
-	name = "portal 3",
-	description = "spawn portal on full gems",
-	cost = 750,
-	persist = false,
-	on_upgrade = function()
-		player.has_overload = true
-	end
-}
+-- upgrade_overload = {
+-- 	spr = OVERLOAD_TILE,
+-- 	name = "portal 3",
+-- 	description = "spawn portal on full gems",
+-- 	cost = 750,
+-- 	persist = false,
+-- 	on_upgrade = function()
+-- 		player.has_overload = true
+-- 	end
+-- }
 
-function show_vendor_window(vendor_obj)
-	sfx(8)
-	local win = {
-		selected_upgrade = 1,
-		update = function(this)
-			if btnp(k_action) then
-				window = nil
-				update_fn = game_update
-				sfx(9)
-				return
-			elseif btnp(k_shoot) then
-				local upgrade = vendor_obj.inventory[this.selected_upgrade]
-				if player.gems - upgrade.cost < 0 then
-					sfx(10)
-					return
-				end
-				if not upgrade.persist then
-					del(vendor_obj.inventory, upgrade)
-					this.selected_upgrade = clamp(this.selected_upgrade, 1, count(vendor_obj.inventory))
-				end
-				sfx(11)
-				player.gems -= upgrade.cost
-				upgrade.on_upgrade()
-			elseif btnp(k_left) then
-				this.selected_upgrade = clamp(this.selected_upgrade-1, 1, count(vendor_obj.inventory))
-			elseif btnp(k_right) then
-				this.selected_upgrade = clamp(this.selected_upgrade+1, 1, count(vendor_obj.inventory))
-			end
-		end,
-		draw = function(this)
-			local window_rect,
-			pad,
-			gems_text,
-			hp_text = {left=camera_pos.x + 8, top=camera_pos.y+40,
-			right=camera_pos.x + 119, bottom=camera_pos.y + 99},
-			4,
-			tostr(player.gems).."/"..tostr(player.max_gems),
-			tostr(player.hp).."/"..tostr(player.max_hp)
+-- function show_vendor_window(vendor_obj)
+-- 	sfx(8)
+-- 	local win = {
+-- 		selected_upgrade = 1,
+-- 		update = function(this)
+-- 			if btnp(k_action) then
+-- 				window = nil
+-- 				update_fn = game_update
+-- 				sfx(9)
+-- 				return
+-- 			elseif btnp(k_shoot) then
+-- 				local upgrade = vendor_obj.inventory[this.selected_upgrade]
+-- 				if player.gems - upgrade.cost < 0 then
+-- 					sfx(10)
+-- 					return
+-- 				end
+-- 				if not upgrade.persist then
+-- 					del(vendor_obj.inventory, upgrade)
+-- 					this.selected_upgrade = clamp(this.selected_upgrade, 1, count(vendor_obj.inventory))
+-- 				end
+-- 				sfx(11)
+-- 				player.gems -= upgrade.cost
+-- 				upgrade.on_upgrade()
+-- 			elseif btnp(k_left) then
+-- 				this.selected_upgrade = clamp(this.selected_upgrade-1, 1, count(vendor_obj.inventory))
+-- 			elseif btnp(k_right) then
+-- 				this.selected_upgrade = clamp(this.selected_upgrade+1, 1, count(vendor_obj.inventory))
+-- 			end
+-- 		end,
+-- 		draw = function(this)
+-- 			local window_rect,
+-- 			pad,
+-- 			gems_text,
+-- 			hp_text = {left=camera_pos.x + 8, top=camera_pos.y+40,
+-- 			right=camera_pos.x + 119, bottom=camera_pos.y + 99},
+-- 			4,
+-- 			tostr(player.gems).."/"..tostr(player.max_gems),
+-- 			tostr(player.hp).."/"..tostr(player.max_hp)
 
-			rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 13)
-			rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 2)
-			print("lunkik", window_rect.left + pad, window_rect.top + pad/2, 2)
-			spr(HP_TILE, window_rect.right - text_w_px(hp_text) - TILE_SIZE - 2, window_rect.top)
-			print(hp_text, window_rect.right - text_w_px(hp_text) - pad/2, window_rect.top + pad/2, 2)
-			spr(GEM_TILE, window_rect.right - text_w_px(gems_text) - TILE_SIZE - 1, window_rect.top + 6)
-			print(gems_text, window_rect.right - text_w_px(gems_text) - pad/2, window_rect.top + pad/2 + 6, 11)
-			local itemx
-			for i=0,count(vendor_obj.inventory)-1 do
-				itemx = window_rect.left + 32 + TILE_SIZE * i + pad + (pad * i)
-				itemy = window_rect.top + pad*2 + TILE_SIZE + 3
-				rectfill(itemx-1, itemy-1, itemx + TILE_SIZE, itemy + TILE_SIZE, 0)
-				spr(vendor_obj.inventory[i+1].spr, itemx, itemy)
-				if i+1 == this.selected_upgrade then
-					print("🅾️",itemx,itemy+TILE_SIZE+3,2)
-					rect(itemx-2, itemy-2, itemx + TILE_SIZE + 1, itemy + TILE_SIZE + 1, 2)
-				end
-			end
+-- 			rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 13)
+-- 			rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 2)
+-- 			print("lunkik", window_rect.left + pad, window_rect.top + pad/2, 2)
+-- 			spr(HP_TILE, window_rect.right - text_w_px(hp_text) - TILE_SIZE - 2, window_rect.top)
+-- 			print(hp_text, window_rect.right - text_w_px(hp_text) - pad/2, window_rect.top + pad/2, 2)
+-- 			spr(GEM_TILE, window_rect.right - text_w_px(gems_text) - TILE_SIZE - 1, window_rect.top + 6)
+-- 			print(gems_text, window_rect.right - text_w_px(gems_text) - pad/2, window_rect.top + pad/2 + 6, 11)
+-- 			local itemx
+-- 			for i=0,count(vendor_obj.inventory)-1 do
+-- 				itemx = window_rect.left + 32 + TILE_SIZE * i + pad + (pad * i)
+-- 				itemy = window_rect.top + pad*2 + TILE_SIZE + 3
+-- 				rectfill(itemx-1, itemy-1, itemx + TILE_SIZE, itemy + TILE_SIZE, 0)
+-- 				spr(vendor_obj.inventory[i+1].spr, itemx, itemy)
+-- 				if i+1 == this.selected_upgrade then
+-- 					print("🅾️",itemx,itemy+TILE_SIZE+3,2)
+-- 					rect(itemx-2, itemy-2, itemx + TILE_SIZE + 1, itemy + TILE_SIZE + 1, 2)
+-- 				end
+-- 			end
 
-			local details_left,
-			details_top,
-			details_line_h =
-				window_rect.left + pad,
-				window_rect.top + 37,8
+-- 			local details_left,
+-- 			details_top,
+-- 			details_line_h =
+-- 				window_rect.left + pad,
+-- 				window_rect.top + 37,8
 
-			print(vendor_obj.inventory[this.selected_upgrade].name, details_left, details_top, 10)
-			print(vendor_obj.inventory[this.selected_upgrade].description, details_left, details_top + details_line_h,7)
-			spr(GEM_TILE, details_left - 2, details_top + details_line_h * 2 - 2)
-			print(vendor_obj.inventory[this.selected_upgrade].cost, details_left + 5,  details_top  + details_line_h * 2, 11)
-		end
-	}
-	window = win
-	update_fn = function()
-		vendor_obj.type.update(vendor_obj)
-		window.update(window)
-	end
-end
+-- 			print(vendor_obj.inventory[this.selected_upgrade].name, details_left, details_top, 10)
+-- 			print(vendor_obj.inventory[this.selected_upgrade].description, details_left, details_top + details_line_h,7)
+-- 			spr(GEM_TILE, details_left - 2, details_top + details_line_h * 2 - 2)
+-- 			print(vendor_obj.inventory[this.selected_upgrade].cost, details_left + 5,  details_top  + details_line_h * 2, 11)
+-- 		end
+-- 	}
+-- 	window = win
+-- 	update_fn = function()
+-- 		vendor_obj.type.update(vendor_obj)
+-- 		window.update(window)
+-- 	end
+-- end
 
 -- toast message --
 -------------------
@@ -641,7 +658,7 @@ pickup_type = {
 			this.expiration_timer -= 1
 			this.anim.frame_time = this.expiration_timer/this.expiration_time <= 0.25 and 4 or this.anim.frame_time
 		end
-		if player.dead or this.expiration_timer <= 0 then
+		if this.expiration_timer <= 0 then
 			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame], 100)
 			destroy_object(this)
 			return
@@ -655,51 +672,55 @@ pickup_type = {
 	end
 }
 
-function make_pickup(x, y, anim, pickup_range)
+function make_pickup(x, y, anim, pickup_range, can_expire)
 	local pickup = init_object(pickup_type, x, y)
 	pickup.pickup_range,
-	pickup.anim = pickup_range or 0,anim
+	pickup.anim,
+	pickup.hitbox,
+	pickup.can_expire =
+		pickup_range,
+		anim,
+		{x=2,y=2,w=3,h=3},
+		can_expire
+		
 	return pickup
 end
 
-function make_gems_pickup(x, y, amount)
-	local pickup = make_pickup(x, y, make_animation({28,29}, 10), 18)
-	pickup.hitbox,
-	pickup.on_pickup={x=2,y=2,w=3,h=3},
-	function(player)
-		player.gems = clamp(player.gems + amount, 0, player.max_gems)
-		destroy_object(pickup)
-		if not has_started_boss_room and player.gems == player.max_gems and player.has_overload and overload_portal == nil then
-			local pos = get_open_pos_next_to(flr(player.x / TILE_SIZE) * TILE_SIZE, flr(player.y / TILE_SIZE) * TILE_SIZE)
-			overload_portal = init_object(portal_type, pos.x, pos.y)
-		end
-	end
-	return pickup
-end
+-- function make_gems_pickup(x, y, amount)
+-- 	local pickup = make_pickup(x, y, make_animation({28,29}, 10), 18, true)
+-- 		pickup.on_pickup = function()
+-- 			player.gems = clamp(player.gems + amount, 0, player.max_gems)
+-- 			destroy_object(pickup)
+-- 			if not has_started_boss_room and player.gems == player.max_gems and player.has_overload and overload_portal == nil then
+-- 				local pos = get_open_pos_next_to(flr(player.x / TILE_SIZE) * TILE_SIZE, flr(player.y / TILE_SIZE) * TILE_SIZE)
+-- 				overload_portal = init_object(portal_type, pos.x, pos.y)
+-- 			end
+-- 		end
+	
+-- 	return pickup
+-- end
 
 function make_hp_pickup(x, y, amount)
-	local pickup = make_pickup(x, y, make_animation({26,27}, 16), 10)
-	pickup.hitbox,
-	pickup.on_pickup = {x=2,y=2,w=3,h=3},
-	function(player)
-		player.hp = clamp(player.hp + amount, player.hp, player.max_hp)
-		destroy_object(pickup)
-	end
+	local pickup = make_pickup(x, y, make_animation({26,27}, 16), 10,true)
+		pickup.on_pickup =	function(player)
+				player.hp = clamp(player.hp + amount, player.hp, player.max_hp)
+				destroy_object(pickup)
+			end
+
 	return pickup
 end
 
 function make_upgrade_pickup(x, y, type)
-	local pickup = make_pickup(x, y, make_animation({type.spr}), 0)
-	pickup.spr,
-	pickup.can_expire,
-	pickup.hitbox,
-	pickup.on_pickup = type.spr,false,{x=2,y=2,w=3,h=3},
-	function()
-		type.on_upgrade()
-		sfx(11)
-		show_toast_message({type.name,"",type.description})
-		destroy_object(pickup)
-	end
+	local pickup = make_pickup(x, y, make_animation({type.spr}), 0, false)
+		pickup.spr = type.spr
+		pickup.on_pickup = function()
+			type.on_upgrade()
+			chests_looted += 1
+			sfx(11)
+			show_toast_message({type.name,type.description},100)
+			destroy_object(pickup)
+		end
+
 	return pickup
 end
 
@@ -718,7 +739,8 @@ projectile_type = {
 		this.damage,
 		this.ricochet,
 		this.pierce,
-		this.hit_list = false,nil,{x=3,y=3,w=2,h=2},0,{x=0, y=0},120,{},1,false,false,{}
+		this.ignore_walls,
+		this.hit_list = false,nil,{x=3,y=3,w=2,h=2},0,{x=0, y=0},120,{},1,false,false,false,{}
 	end,
 	update=function(this)
 		this.lifetime -= 1
@@ -738,9 +760,8 @@ projectile_type = {
 			if not this.pierce then
 				destroy_object(this)
 			end
-			return
 		end
-		if not this.can_move_through(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
+		if not this.ignore_walls and not this.can_move_through(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
 			if this.ricochet then
 				this.hit_list = {}
 				-- cheap bounce calc without normals since all walls are axis-aligned
@@ -776,7 +797,6 @@ chest_type = {
 		this.hp -= amount
 		start_hurt_object(this)
 		if this.hp <= 0 then
-			total_chests += 1
 			--play destroy sound
 			mset(pos_to_tile(this.x), pos_to_tile(this.y), FLOOR_TILE)
 			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame])
@@ -944,7 +964,7 @@ door_type = {
 		start_hurt_object(this)
 		if this.hp <= 0 then
 			--play destroy sound
-			total_doors += 1
+			doors_destroyed += 1
 			mset(pos_to_tile(this.x), pos_to_tile(this.y), FLOOR_TILE)
 			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame])
 			destroy_object(this)
@@ -1105,7 +1125,7 @@ torch_type = {
 		this.anim,
 		this.static={x=1,y=2,w=6,h=5},false,false,nil,make_animation({57,58}, 6),true
 		this.auto_target_radius = 1000
-		this.aggressive = false
+		this.aggressive = (room.y >= 2 and room.x <= 4) or (has_started_boss_room and boss_hp > 0)
 		this.fire_timer = rnd(10) + rnd(50) + 40
 	end,
 	update=function(this)
@@ -1121,6 +1141,7 @@ torch_type = {
 			this.fire_timer = rnd(10) + rnd(50) + 40
 			local dir = get_direction({x=this.x, y=this.y+TILE_HALF_SIZE}, {x=this.target.x, y=this.target.y})
 			local proj = make_projectile(this.x, this.y + TILE_HALF_SIZE, make_animation({52}), 2, 0.75, dir)
+			proj.ignore_walls = true
 			sfx(3)
 			add(proj.collision_groups, PLAYER_GROUP)
 		end
@@ -1179,14 +1200,14 @@ mirror_type = {
 
 function show_player_stats_toast()
 	show_toast_message({
-		"        hp: "..tostr(flr(player.hp)).."/"..tostr(player.max_hp),
-		"      gems: "..tostr(player.gems).."/"..tostr(player.max_gems),
-		"    damage: "..tostr(player.projectil_damage),
-		" fire rate: "..tostr(60/player.fire_rate),
+		"       hp: "..tostr(flr(player.hp)).."/"..tostr(player.max_hp),
+		-- "     gems: "..tostr(player.gems).."/"..tostr(player.max_gems),
+		"   damage: "..tostr(player.projectil_damage),
+		"fire rate: "..tostr(60/player.fire_rate),
 		"- - - - - - - - - - -",
-		"   enemies: "..tostr(total_enemies),
-		"     doors: "..tostr(total_doors),
-		"    chests: "..tostr(total_chests),
+		"    doors: "..tostr(doors_destroyed).."/"..tostr(total_doors),
+		"   chests: "..tostr(chests_looted).."/"..tostr(total_chests),
+		"  enemies: "..tostr(enemies_destroyed)
 	})
 end
 
@@ -1194,40 +1215,40 @@ end
 -- portal --
 ------------
 
-portal_type = {
-	init=function(this)
-		this.frames,
-		this.frame_times,
-		this.current_frame,
-		this.frame_time,
-		this.frame_step = {21,22,23,24},{15,15,15,15},1,0,1
-		this.on_interact = function()
-			start_portal_transition(this)
-		end
-		this.is_boss_portal = false
-	end,
-	update=function(this)
-		this.can_interact = player ~= nil and not player.dead and player.x == this.x and player.y == this.y
-		if this.can_interact and btnp(k_action) then
-			this.on_interact()
-		end
-		this.frame_time += 1
-		if this.frame_time >= this.frame_times[this.current_frame] then
-			this.frame_time = 0
-			if this.current_frame == count(this.frames) then
-				this.frame_step = -1
-			elseif this.current_frame == 1 and this.frame_step == -1 then
-				this.frame_step = 1
-				this.frame_time = 0
-				return
-			end
-			this.current_frame += this.frame_step
-		end
-	end,
-	draw=function(this)
-		spr(this.frames[this.current_frame], this.x, this.y, 1, 1, this.frame_step == -1)
-	end
-}
+-- portal_type = {
+-- 	init=function(this)
+-- 		this.frames,
+-- 		this.frame_times,
+-- 		this.current_frame,
+-- 		this.frame_time,
+-- 		this.frame_step = {21,22,23,24},{15,15,15,15},1,0,1
+-- 		this.on_interact = function()
+-- 			start_portal_transition(this)
+-- 		end
+-- 		this.is_boss_portal = false
+-- 	end,
+-- 	update=function(this)
+-- 		this.can_interact = player ~= nil and not player.dead and player.x == this.x and player.y == this.y
+-- 		if this.can_interact and btnp(k_action) then
+-- 			this.on_interact()
+-- 		end
+-- 		this.frame_time += 1
+-- 		if this.frame_time >= this.frame_times[this.current_frame] then
+-- 			this.frame_time = 0
+-- 			if this.current_frame == count(this.frames) then
+-- 				this.frame_step = -1
+-- 			elseif this.current_frame == 1 and this.frame_step == -1 then
+-- 				this.frame_step = 1
+-- 				this.frame_time = 0
+-- 				return
+-- 			end
+-- 			this.current_frame += this.frame_step
+-- 		end
+-- 	end,
+-- 	draw=function(this)
+-- 		spr(this.frames[this.current_frame], this.x, this.y, 1, 1, this.frame_step == -1)
+-- 	end
+-- }
 
 -- enemy spawn point --
 -----------------------
@@ -1306,7 +1327,7 @@ boss_door_type = {
 		this.hurt_duration_timer = this.hurt_duration
 		boss_hp -= amount
 		if boss_hp <= 0 then
-			total_doors += 1
+			doors_destroyed += 1
 			start_boss_defeated()
 		else
 			start_hurt_object(this)
@@ -1315,8 +1336,9 @@ boss_door_type = {
 }
 
 function start_boss_defeated()
-	local obj = nil
+	local obj,should_destroy = nil
 	for i=count(objects),1,-1 do
+		local should_destroy = true
 		obj = objects[i]
 		if obj ~= player then
 			if obj.static then
@@ -1324,12 +1346,17 @@ function start_boss_defeated()
 				if obj.type == boss_door_type then
 					mset(pos_to_tile(obj.x),pos_to_tile(obj.y),FLOOR_TILE)
 				elseif obj.type == torch_type then
-					mset(pos_to_tile(obj.x),pos_to_tile(obj.y),WALL_TILE)
+					should_destroy = false
+					obj.aggressive = false
+				elseif obj.type == mirror_type then
+					should_destroy = false
 				else
 					mset(pos_to_tile(obj.x),pos_to_tile(obj.y),FLOOR_TILE)
 				end
 			end
-			destroy_object(obj)
+			if should_destroy then
+				destroy_object(obj)
+			end
 		end
 	end
 	make_particle_group(72*TILE_SIZE,48*TILE_SIZE,BOSS_TILE,rnd(250) + 250)
@@ -1424,7 +1451,7 @@ function init_object(type,x,y)
 			obj.hp -= amount
 			if obj.hp <= 0 then
 				if obj.is_enemy then
-					total_enemies += 1
+					enemies_destroyed += 1
 				end
 				if obj.anim ~= nil then
 					make_particle_group(obj.x,obj.y, obj.anim.frames[obj.anim.current_frame])
@@ -1437,8 +1464,8 @@ function init_object(type,x,y)
 				if obj.type ~= player_type then
 					if rnd(1000) > 900 then
 						make_hp_pickup(obj.x,obj.y,flr((rnd(3) + 1)) * difficulty)
-					elseif not has_started_boss_room and rnd(1000) > 100 then
-						make_gems_pickup(obj.x,obj.y,flr((rnd(5) + 3) * difficulty))
+					-- elseif not has_started_boss_room and rnd(1000) > 100 then
+					-- 	make_gems_pickup(obj.x,obj.y,flr((rnd(5) + 3) * difficulty))
 					end
 					sfx(4)
 				end
@@ -1718,7 +1745,7 @@ function draw_ui()
 		return
 	end
 	draw_hp_bar()
-	draw_gems_bar()
+	-- draw_gems_bar()
 	if has_started_boss_room and boss_hp > 0 then
 		draw_boss_hp_bar()
 	end
@@ -1735,12 +1762,12 @@ function draw_hp_bar()
 	pal()
 end
 
-function draw_gems_bar()
-	local yoffset,pad,w,h = 3,1,31,2
-	rectfill(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + w + pad, camera_pos.y + h + pad + yoffset, 0)
-	rectfill(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + pad + flr(player.gems/player.max_gems*w), camera_pos.y + h + pad + yoffset, 11)
-	rect(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + w + pad, camera_pos.y + h + pad + yoffset, 7)
-end
+-- function draw_gems_bar()
+-- 	local yoffset,pad,w,h = 3,1,31,2
+-- 	rectfill(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + w + pad, camera_pos.y + h + pad + yoffset, 0)
+-- 	rectfill(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + pad + flr(player.gems/player.max_gems*w), camera_pos.y + h + pad + yoffset, 11)
+-- 	rect(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + w + pad, camera_pos.y + h + pad + yoffset, 7)
+-- end
 
 function draw_boss_hp_bar()
 	left,top,w,h=camera_pos.x+6*TILE_SIZE,camera_pos.y+1,39,5
@@ -1780,6 +1807,7 @@ function start_room_transition(x_index, y_index)
 			ty = r*TILE_SIZE
 			tile_type = mget(c,r)
 			if tile_type == DOOR_TILE then
+				mset(c,r,NO_PASS_FLOOR_TILE)
 				init_object(door_type, tx, ty)
 			elseif tile_type == ENEMY_SPAWN_TILE then
 				make_enemy_spawn_point(tx,ty)
@@ -1809,12 +1837,12 @@ function start_room_transition(x_index, y_index)
 				place_upgrade_chest(c,r,tx,ty,upgrade_projectile_ricochet)
 			elseif tile_type == PIERCE_TILE then
 				place_upgrade_chest(c,r,tx,ty,upgrade_projectile_pierce)
-			elseif tile_type == SATCHEL_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_max_gems)
+			-- elseif tile_type == SATCHEL_TILE then
+			-- 	place_upgrade_chest(c,r,tx,ty,upgrade_max_gems)
 			elseif tile_type == FAST_SHOT_TILE then
 				place_upgrade_chest(c,r,tx,ty,upgrade_fast_shot)
-			elseif tile_type == OVERLOAD_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_overload)
+			-- elseif tile_type == OVERLOAD_TILE then
+			-- 	place_upgrade_chest(c,r,tx,ty,upgrade_overload)
 			elseif tile_type == BOSS_TILE and room.x == 4 and room.y == 3 then
 				init_object(boss_door_type,tx,ty)
 			elseif tile_type == MOOSE_TILE then
@@ -1896,14 +1924,15 @@ function goto_boss_room()
 	camera_pos.y = tile_to_screen(3)
 	player.x = 66 * TILE_SIZE
 	player.y = 49 * TILE_SIZE
+	player.hp = player.max_hp
 	start_room_transition(room.x,room.y)
 	camera(camera_pos.x, camera_pos.y)
 	end_room_transition()
-	foreach(objects, function(obj)
-		if obj.type == torch_type then
-			obj.aggressive = true
-		end
-	end)
+	-- foreach(objects, function(obj)
+	-- 	if obj.type == torch_type then
+	-- 		obj.aggressive = true
+	-- 	end
+	-- end)
 end
 
 function start_portal_transition(portal)
@@ -1935,7 +1964,7 @@ function start_portal_transition(portal)
 		player.moves = room.x,room.y,portal.x,portal.y,0,0,0,0,64,64,{}
 
 		start_room_transition(room.x, room.y)
-		init_object(portal_type, 56, 64)
+		-- init_object(portal_type, 56, 64)
 	end
 	camera(camera_pos.x, camera_pos.y)
 	end_room_transition()
@@ -1996,7 +2025,7 @@ function tile_to_screen(v)
 end
 
 function pos_to_tile(v)
-	return v/TILE_SIZE
+	return flr(v/TILE_SIZE)
 end
 
 function text_w_px(text)
@@ -2130,37 +2159,37 @@ __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010
+00000000000000000000000000000000000000101020100000000000000000001010101010101010101010101010100010101010101010101020100000000000
 00000000001093202020931000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+0000000000000000000000000000000000000010203110000000000000000000102020202020202020202020b220100010b22020202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+0000000000000000000000000000000000000010b220100000000000000000001020101010101010101010202020100010202020202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+93101010101010101010101010000000000000101020101000000000000000001020100000000000000010202020100010202020209320202020100000000000
 00000000001093202020931000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+10202020202020202020202010000000000000001031c21000000000000000001020101010101010100010206020100010101010202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+10202020202020202020202010101010100000001020201000000000000000001020102020202020100010202020100010202020202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+10202020200120012020202020202092100000001020101000000000000000001031302020202020100010209220100010209320209320209320100000000000
 00000000001093202020931000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+102020200120202001202020102020201010101093319310101010101010101010c2102020602020100010101010100010202020202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+10202001202031202001202010c09191102020202020202020202020202020101010102020202020100000000000000010202020202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+102020202020c3222020202020202020202020202020202020202020202020202020202020202020931010101010101010209320209320209320100000000000
 00000000001093202020931000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+10202001202031202001202010101010102020202020202020202020202020101010102020202020202020202020201010202020202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+10202020012020200120202010000000101010011010011010011010011010100000102020202020202020202020101010102020202020101010100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+10202020200120012020202010000000102020202020202020202020202020100000102020202020202020602020302020302020209320202020100000000000
 00000000001093202020931000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+102020202020202020202020100000001092202020602020202060202020c2100000102020202020202020202020101010102020202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
+10202020202020202020202010000000102020202020202020202020202020100000102020202020202020202020201010202020202020202092100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010
+93101010101010101010101010000000101010101010101010101010101010100000101010101010101010101010101010101010101010101010100000000000
 00000000001093202020931000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 10101010101010101010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -2329,37 +2358,37 @@ __gff__
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __map__
 0101010101010101010101010100000000000000000000000000000101010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-01020202010001010501010001000000000000000000000000000001022b0201000101010101000000000000000000000000000000000000000001010101010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102250201010105050501010100000001010101010101010000000102020201010110021001000000000000000000000000000000000000000001102a10010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-010c272701010505050505010100000001020201020202010000000102020202020302100201000000000000000000000000000000000000000001021002010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020239390505050505393901010101020201020202010000000102020201010110021001000000000000000000000000000000000000000001020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202160202020202020101020201060202010000000102020201000102020201000000000000000000000000000000000000000001020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202010000000102020201000102020201010101010000000000000000000000000101010101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-010202020202020202020202020202010102020202020201000000010202020100010206020202022b01000000000000000000000000012b020202020602010100000000010101010101010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020302020202020202010000000102060201000102020202020202010000000000000000000000000102020202020202010100000001010101013901010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202010000000102020201000102020202020202010101010101000001010101010102020202020202010100000001013902020202023901010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202010000000102020201000102020202020202020202020201000001020202020202020202020202010100000001010202020202020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020601020202010101010102020201000102020202020202020210021001010101100210020202020202020602010100000001010202022302020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020201020202020202020102020201000102020202020206020202100203020203021002020202060202020202010100000001010202020202020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020201020202020202020302020201000102020202020202020210021001010101100210020202020202020202010100000001013902020202023901010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020102020201000102020202020202020202020201000001020202020202020202020202010100000001010101020202010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101010101010101010101010101010101010101010101010102010101010101000101010101010101010101010101000001010101010101010201010101010100000000010101010201010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101010101010101010101010101000000000000000000000102010000000000000101010101010101010101010101010000000000000000010201000000000100000000000101010301010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202030202021002020201000000000000000001010103010101000000000102020202020202020202020202010101010101010101010201010101010100000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102130101010202102d10020201000000000000000001020213020201000000000102020202020202020202020202010102020202020202010301020202020100000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101020100010202021002020201000000000000000001020202020201000000000102020202020202020202020202010102020202020202020202020202020100000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101020100010202020202020201000000000000000001020202020201000000000102020202020202020202020202010102020202020202020202020202020100000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020100010202020202020201000001010101010101020202020201000000000102020202020202020202020202010102020202020202020202020202020100000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102130100010202020602020201000001020202020202020202020201000000000102020202020202020202020202010102020202020202020202020202020100000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101020100010101010101010101000001020202020202020202020201000000000102020202020202020202020202010102020202020202020202020202020100000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101020100000000000000000000000001020202020202020202020201000000000102020202020202020202020202010102020202020202020202020202020100000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020101010101010101010100000001020202020202010101010101000000000102020202020202020202020202010102020202020202020202020202020100000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102130202020210020602100100000001020202020202010000000000000000000102020202020202020202020202010102020202020202020202020202020100000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101020201010102010101020101010101130202020202010101010101010101000102020202020202020202020202010102020202020202020202020202020100000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101020201000102010001020202100101030102020202060202020202020201010102020202020202020202020202010102020202020202020202020202020100000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020201000102010101020210020202020102020202020202020602021002020302020202020202020202020202010102020202020202020202020202020100000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-01022b0201000102020202020202100101010102020202060202020202020201010102020202020202020202020202010102020202020202020202020202020100000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101010101010101010101010101010100000101010101010101010101010101000101010101010101010101010101010101010101010101010101010101010100000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01020202010001010501010001000000000000000000000000000001022c0201000101010101000000000000000000000000000000000000000001010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102250201010105050501010100000001010101010101010000000102020239010110021001000000000000000000000000000000000000000001102a10010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010c27270101050505050501010000000102020102022b010000000102020202020302100201000000000000000000000000000000000000000001021002010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020239390505050505393901010101020201020202010000000102020239010110021001000000000000000000000000000000000000000001020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020101020239060202010000000102020201000102020201000000000000000000000000000000000000000001020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020101020202020202010000000102020201000102020239010101010000000000000000000000000101010139020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010202020202020202020202020202010102020202020201000000010202020100010206020202022c01000000000000000000000000012b020202020602010000000000010101010101010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020302020202020202010000000102060201000102020202020202010000000000000000000000000102020202020202010000000001010101013901010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020101020202020202010000000102020201000102020202020202390101010101000001010101013902020202020202010000000001013902020202023901010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020101020202020202010000000102020201000102020202020202020202020201000001020202020202020202020202010000000001010202020202020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020101020639020202010101010102020201000102020202020202020210021001010101100210020202020202020602010000000001010202022302020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020101020201020202020202020102020201000102020202020206020202100203020203021002020202060202020202010000000001010202020202020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020101020201020202020202020302020201000102020202020202020210021001010101100210020202020202020202010000000001013902020202023901010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01020202020202020202020202020201012b0202020202020202020102020201000102020202020202020202020201000001020202020202020202020202010000000001010101020202010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101010101010101010101010101010101010101010101010102010101010101000101010101010101010101010101000001010101010101010201010101010000000000010101010201010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101010101010101010101010101000000000000000000000102010000000000000000000000000000000000000000000000000000000000010201000000000000000000000101010201010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202030202021002020201000000000000000001010103010101000000000000000000000000000000000000000000000000010101010201010101000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102130101010202102d10020201000000000000000001020213020201000000000000000000000000000000000000000000000000012c02390339022901000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020100010202021002020201000000000000000001020202020201000000000000000000000000000000000000000000000000010202020202020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020100010202020202020201000000000000000001020202020201000000000000000000000000000000000000000000000000010202020202020201000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020100010202020202020201000001010101010139020202020201000000000000000000000000000000000000000000000000010202020202020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102130100010202020602020201000001020202020202020202020201000000000000000000000000000000000000000000000000010202060206020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020100010101010101010101000001020202020202020202020201000000000000000000000000000000000000000000000000010202020202020201000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020100000000000000000000000001020202020202020202020201000000000101010101010101010101010000000000000000010202060206020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010202010101010101010101010000000102020202020239010101010100000000012c022901020202020206010000000000000000010202020202020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102130202020210020602100100000001020202020202010000000000000000000102220201020202020202010101010101010101010202020202020201000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010102020101010201010102010101010113020202020201010101010101010101010c191001020202020202391002020202021010390202020202020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020201000102010001020202100101033902020202060202020202021002023902100210060202020213031002020202021010031302020202020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020201000102010101020210020202020102020202020202020602021002020313020202020202020202010101010101010101010101010201010101000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01022b0201000102020202020202100101010102020202060202020202020101010102020202020202020202010000000000000000000000010201000000000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101010101010101010101010101010100000101010301010101010101010100000101010101010101010101010000000000000000000000010201000000000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
 000100001952019550185301653013510115100e5100b520075200152000520123001430017300113001430016300193001b3000970009700097001500013000120001100011000100000e0000d0000c0000b000
 000600001d0702307026070280702907025070220701d0701807015070130701207012070130701507016070180701b0701f070250702b0702d0702b0702907026070220701f0701a07017070150701407014070
