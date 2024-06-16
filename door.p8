@@ -59,8 +59,8 @@ __lua__
 -- [x] add boss-door destroyed effects
 -- [x] spawn moose behind boss-door when destroyed
 -- [x] add toast messages
--- [] add artifact (holy grail)
--- [] add stats (doors destroyed, enemies destroyed, ...)
+-- [x] add artifact (holy grail)
+-- [x] add stats (doors destroyed, enemies destroyed, ...)
 -- [] add win screen and show stats
 -- [] show stats on death and win screen
 
@@ -85,8 +85,8 @@ __lua__
 
 -- [x] add window
 -- [x] make window interactive
+-- [x] make enemy spawn points configurable or pull from different type pools based on conditions
 -- [] tune enemy movement and damage
--- [] make enemy spawn points configurable or pull from different type pools based on conditions
 
 -- ideas --
 -----------
