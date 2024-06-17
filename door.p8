@@ -86,7 +86,7 @@ __lua__
 -- [x] add window
 -- [x] make window interactive
 -- [x] make enemy spawn points configurable or pull from different type pools based on conditions
--- [] tune enemy movement and damage
+-- [x] tune enemy movement and damage
 
 -- ideas --
 -----------
@@ -147,14 +147,25 @@ HURT_FLASH_PAL = 0,1,2,0,1,2,4,3,16,6,19,21,37,28,27,14,57,40,41,42,43,44,45,22,
 -------------
 
 room,
-overload_portal,
-last_portal_used,
+-- overload_portal,
+-- last_portal_used,
 camera_pos,
 camera_spd,
 objects,
 transition_objects,
-types,
-difficulty = {x=0,y=0},nil,{room={x=0,y=0},pos={0,0}},{x=0,y=0},4,{},{},{},1.0
+difficulty,
+enemy_hp_scale,
+enemy_dmg_scale =
+	{x=0,y=0}, -- room
+	-- nil, -- overload portal
+	-- {room={x=0,y=0},pos={0,0}}, -- last portal used
+	{x=0,y=0},
+	4, -- camera speed
+	{}, -- objects
+	{}, -- transition objects
+	1.0, -- difficulty
+	0.75, -- enemy hp scale
+	0.5 -- enemy dmg scale
 
 k_left,
 k_right,
@@ -182,7 +193,7 @@ is_all_powerful = false
 has_shown_is_all_powerful_msg = false
 has_started_boss_room = false
 has_attempted_artifact_activation = false
-max_boss_hp = 100
+max_boss_hp = 12000
 boss_hp = max_boss_hp
 
 update_fn = function()
@@ -208,7 +219,7 @@ function _init()
 		"",
 		"!! destroy that huge door !!",
 	}, 750)
-	-- goto_boss_room()
+	goto_boss_room()
 end
 
 function calculate_stat_totals_from_map()
@@ -315,7 +326,7 @@ player_type = {
 		this.hitbox={x=2,y=2,w=3,h=4}
 		this.target=nil
 		this.auto_target_radius = 40
-		this.projectil_damage = 2
+		this.projectile_damage = 2
 		this.projectile_speed = 1.3
 		this.has_ricochet = false
 		this.has_pierce = false
@@ -389,7 +400,14 @@ player_type = {
 			if dir.x == 0 and dir.y == 0 then
 				dir.y = 1
 			end
-			local proj = make_projectile(this.x, this.y, make_animation({30,31}, 4), this.projectil_damage, this.projectile_speed, dir)
+			local proj = make_projectile(
+				this.x,
+				this.y,
+				make_animation({30,31}, 4),
+				this.projectile_damage,
+				this.projectile_speed,
+				dir
+			)
 			proj.ricochet = this.has_ricochet
 			proj.pierce = this.has_pierce
 			add(proj.collision_groups, ENEMY_GROUP)
@@ -398,7 +416,10 @@ player_type = {
 		foreach(objects, function(obj)
 			if this.collides_with(obj) then
 				if obj.touch_damage > 0 then
-					this.type.take_damage(this, obj.touch_damage)
+					this.type.take_damage(
+						this,
+						get_enemy_dmg_for_difficulty(obj.touch_damage)
+					)
 				elseif obj.on_pickup ~= nil then
 					obj.on_pickup(this)
 				elseif obj.type.on_activate ~= nil then
@@ -418,9 +439,9 @@ vendor_type = {
 		this.anim,
 		this.can_interact = {
 			-- upgrade_max_gems,
-			upgrade_max_hp,
-			upgrade_projectile_damage,
-			upgrade_fast_shot,
+			upgrade_hp,
+			upgrade_damage,
+			upgrade_fire_rate,
 		},
 		make_animation({37,38}, 20),
 		false
@@ -451,32 +472,44 @@ vendor_type = {
 -- 	end
 -- }
 
-upgrade_max_hp = {
+upgrade_hp = {
 	spr = UPGRADE_HP_TILE,
 	name = "let me live",
 	description = "+1 to max hp and healz",
-	cost = 100,
-	persist = true,
+	-- cost = 100,
+	-- persist = true,
 	on_upgrade = function()
 		player.max_hp += 1
 		player.hp = player.max_hp
-		difficulty *= 1.05
+		increase_difficulty(0.15)
 	end
 }
 
-upgrade_fast_shot = {
+upgrade_damage = {
+	spr = UPGRADE_DMG_TILE,
+	name = "tis more than a scratch",
+	description = "+1 to projectile damage",
+	-- cost = 300,
+	-- persist = true,
+	on_upgrade = function()
+		player.projectile_damage += 1
+		increase_difficulty(0.15)
+	end
+}
+
+upgrade_fire_rate = {
 	spr = FAST_SHOT_TILE,
 	name = "it's high noon",
 	description = "increase rate of fire",
-	cost = 500,
-	persist = true,
+	-- cost = 500,
+	-- persist = true,
 	on_upgrade = function()
-		player.fire_rate = clamp(player.fire_rate - 1, 8, 20)
+		player.fire_rate = clamp(player.fire_rate - 1.5, 8, 20)
 		player.fire_timer = 0
-		difficulty *= 1.1
-		if player.fire_rate <= 8 then
-			upgrade_fast_shot.persist = false
-		end
+		increase_difficulty(0.15)
+		-- if player.fire_rate <= 8 then
+		-- 	upgrade_fire_rate.persist = false
+		-- end
 	end
 }
 
@@ -484,23 +517,11 @@ upgrade_projectile_ricochet = {
 	spr = RICOCHET_TILE,
 	name = "(bounce) pogo pogo...",
 	description = "projectiles bounce",
-	cost = 500,
-	persist = false,
+	-- cost = 500,
+	-- persist = false,
 	on_upgrade = function()
 		player.has_ricochet = true
-		difficulty *= 1.1
-	end
-}
-
-upgrade_projectile_damage = {
-	spr = UPGRADE_DMG_TILE,
-	name = "tis more than a scratch",
-	description = "+1 to projectile damage",
-	cost = 300,
-	persist = true,
-	on_upgrade = function()
-		player.projectil_damage += 1
-		difficulty *= 1.1
+		increase_difficulty(0.3)
 	end
 }
 
@@ -508,11 +529,11 @@ upgrade_projectile_pierce = {
 	spr = PIERCE_TILE,
 	name = "nice earings",
 	description = "projectiles pierce",
-	cost = 1000,
-	persist = false,
+	-- cost = 1000,
+	-- persist = false,
 	on_upgrade = function()
 		player.has_pierce = true
-		difficulty *= 1.1
+		increase_difficulty(0.3)
 	end
 }
 
@@ -848,7 +869,22 @@ eye_type = {
 		this.move_rate,
 		this.move_timer,
 		this.anim,
-		this.is_enemy=90,0,{x=2,y=3,w=4,h=5},nil,40,ENEMY_GROUP,3,30,0,make_animation({48,49}, 16),true
+		this.touch_damage,
+		this.projectile_damage,
+		this.is_enemy=
+			90, -- fire rate
+			0, -- fire timer
+			{x=2,y=3,w=4,h=5}, -- hitbox
+			nil, -- target
+			40, -- auto target radius
+			ENEMY_GROUP, -- group
+			3, -- hp
+			30, -- move rate
+			0, -- move timer
+			make_animation({48,49}, 16), -- anim
+			2, -- touch damage
+			2, -- range damage
+			true -- is enemy
 	end,
 	update=function(this)
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
@@ -861,7 +897,14 @@ eye_type = {
 		if this.target ~= nil and this.fire_timer <= 0 and ceil(rnd(100)) > 95 then
 			this.fire_timer = this.fire_rate
 			local dir = get_direction({x=this.x, y=this.y}, {x=this.target.x, y=this.target.y})
-			local proj = make_projectile(this.x, this.y, make_animation({46,47}, 8), 2, 0.5, dir)
+			local proj = make_projectile(
+				this.x,
+				this.y,
+				make_animation({46,47}, 8),
+				get_enemy_dmg_for_difficulty(this.projectile_damage),
+				0.5,
+				dir
+			)
 			sfx(3)
 			add(proj.collision_groups, PLAYER_GROUP)
 		end
@@ -880,7 +923,17 @@ bug_type = {
 		this.move_rate,
 		this.move_timer,
 		this.touch_damage,
-		this.is_enemy={x=1,y=2,w=6,h=5},nil,40,make_animation({50,51}, 25),ENEMY_GROUP,4,15,0,2,true
+		this.is_enemy=
+			{x=1,y=2,w=6,h=5}, -- hitbox
+			nil, -- target
+			40, -- auto target radius
+			make_animation({50,51}, 25), -- anim
+			ENEMY_GROUP, -- group
+			4, -- hp
+			15, -- move rate
+			0, -- move timer
+			3, -- touch damage
+			true -- is enemy
 	end,
 	update=function(this)
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
@@ -903,7 +956,17 @@ fang_type = {
 		this.move_rate,
 		this.move_timer,
 		this.touch_damage,
-		this.is_enemy={x=1,y=2,w=6,h=5},nil,40,make_animation({53,54}, 40),ENEMY_GROUP,5,5,0,4,true
+		this.is_enemy=
+			{x=1,y=2,w=6,h=5}, -- hitbox
+			nil, -- target
+			40, -- auto target radius
+			make_animation({53,54}, 40), -- animation
+			ENEMY_GROUP, -- group
+			5, -- hp
+			5, -- move rate
+			0, -- move timer
+			4, -- touch damage
+			true -- is enemy
 	end,
 	update=function(this)
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
@@ -917,8 +980,6 @@ fang_type = {
 
 skull_type = {
 	init=function(this)
-		this.fire_rate,
-		this.fire_timer,
 		this.hitbox,
 		this.target,
 		this.auto_target_radius,
@@ -928,7 +989,23 @@ skull_type = {
 		this.move_rate,
 		this.move_timer,
 		this.touch_damage,
-		this.is_enemy=45,0,{x=1,y=2,w=6,h=5},nil,40,make_animation({55,56}, 30),ENEMY_GROUP,6,5,0,3,true
+		this.projectile_damage,
+		this.fire_rate,
+		this.fire_timer,
+		this.is_enemy=
+			{x=1,y=2,w=6,h=5}, -- hitbox
+			nil, -- target
+			40, -- auto target radius
+			make_animation({55,56}, 30), -- anim
+			ENEMY_GROUP, -- group
+			6, -- hp
+			5, -- move rate
+			0, -- move timer
+			3, -- touch damage
+			0, -- projectile damage
+			45, --fire rate
+			0, -- fire timer
+			true -- is enemy
 	end,
 	update=function(this)
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
@@ -941,7 +1018,14 @@ skull_type = {
 		if this.target ~= nil and this.fire_timer <= 0 and ceil(rnd(100)) > 50 then
 			this.fire_timer = this.fire_rate
 			local dir = get_direction({x=this.x, y=this.y}, {x=this.target.x, y=this.target.y})
-			local proj = make_projectile(this.x, this.y, make_animation({46,47}, 8), 3, 0.75, dir)
+			local proj = make_projectile(
+				this.x,
+				this.y,
+				make_animation({46,47}, 8),
+				get_enemy_dmg_for_difficulty(this.projectile_damage),
+				0.75,
+				dir
+			)
 			sfx(3)
 			add(proj.collision_groups, PLAYER_GROUP)
 		end
@@ -985,7 +1069,7 @@ trap_type = {
 		this.targetable,
 		this.active,
 		this.collidable,
-		this.projectil_damage,
+		this.projectile_damage,
 		this.projectile_speed,
 		this.static = make_animation({19}),make_animation({20}),300,0,false,false,true,1,1,true
 
@@ -1023,7 +1107,7 @@ trap_type = {
 					if offset > 3 then
 						add(
 							projectiles,
-							make_projectile((col - offset) * TILE_SIZE + TILE_HALF_SIZE, this.y, make_animation({52}), this.projectil_damage, this.projectile_speed, {x=1,y=0})
+							make_projectile((col - offset) * TILE_SIZE + TILE_HALF_SIZE, this.y, make_animation({52}), this.projectile_damage, this.projectile_speed, {x=1,y=0})
 						)
 					end
 				end
@@ -1034,7 +1118,7 @@ trap_type = {
 					if offset > 3 then
 						add(
 							projectiles,
-							make_projectile((col + offset) * TILE_SIZE - TILE_HALF_SIZE, this.y, make_animation({52}), this.projectil_damage, this.projectile_speed, {x=-1,y=0})
+							make_projectile((col + offset) * TILE_SIZE - TILE_HALF_SIZE, this.y, make_animation({52}), this.projectile_damage, this.projectile_speed, {x=-1,y=0})
 						)
 					end
 				end
@@ -1045,7 +1129,7 @@ trap_type = {
 					if offset > 3 then
 						add(
 							projectiles,
-							make_projectile(this.x, (row - offset) * TILE_SIZE + TILE_HALF_SIZE, make_animation({52}), this.projectil_damage, this.projectile_speed, {x=0,y=1})
+							make_projectile(this.x, (row - offset) * TILE_SIZE + TILE_HALF_SIZE, make_animation({52}), this.projectile_damage, this.projectile_speed, {x=0,y=1})
 						)
 					end
 				end
@@ -1056,7 +1140,7 @@ trap_type = {
 					if offset > 3 then
 						add(
 							projectiles,
-							make_projectile(this.x, (row + offset) * TILE_SIZE - TILE_HALF_SIZE, make_animation({52}), this.projectil_damage, this.projectile_speed, {x=0,y=-1})
+							make_projectile(this.x, (row + offset) * TILE_SIZE - TILE_HALF_SIZE, make_animation({52}), this.projectile_damage, this.projectile_speed, {x=0,y=-1})
 						)
 					end
 				end
@@ -1126,7 +1210,7 @@ torch_type = {
 		this.static={x=1,y=2,w=6,h=5},false,false,nil,make_animation({57,58}, 6),true
 		this.auto_target_radius = 1000
 		this.aggressive = (room.y >= 2 and room.x <= 4) and boss_hp > 0
-		this.fire_timer = rnd(10) + rnd(50) + 40
+		this.fire_timer = rnd(10) + rnd(50) + 150
 	end,
 	update=function(this)
 		this.anim.update()
@@ -1138,7 +1222,7 @@ torch_type = {
 		this.fire_timer -= 1
 		this.find_player_target()
 		if this.target ~= nil and this.fire_timer <= 0 and ceil(rnd(100)) > 50 then
-			this.fire_timer = rnd(10) + rnd(50) + 40
+			this.fire_timer = rnd(10) + rnd(50) + 150
 			local dir = get_direction({x=this.x, y=this.y+TILE_HALF_SIZE}, {x=this.target.x, y=this.target.y})
 			local proj = make_projectile(this.x, this.y + TILE_HALF_SIZE, make_animation({52}), 2, 0.75, dir)
 			proj.ignore_walls = true
@@ -1201,14 +1285,15 @@ mirror_type = {
 
 function show_player_stats_toast()
 	show_toast_message({
-		"       hp: "..tostr(flr(player.hp)).."/"..tostr(player.max_hp),
+		"        hp: "..tostr(flr(player.hp)).."/"..tostr(player.max_hp),
 		-- "     gems: "..tostr(player.gems).."/"..tostr(player.max_gems),
-		"   damage: "..tostr(player.projectil_damage),
-		"fire rate: "..tostr(60/player.fire_rate),
+		"    damage: "..tostr(player.projectile_damage),
+		" fire rate: "..tostr(60/player.fire_rate),
+		"difficulty: "..tostr(difficulty),
 		"- - - - - - - - - - -",
-		"    doors: "..tostr(doors_destroyed).."/"..tostr(total_doors),
-		"   chests: "..tostr(chests_looted).."/"..tostr(total_chests),
-		"  enemies: "..tostr(enemies_destroyed)
+		"     doors: "..tostr(doors_destroyed).."/"..tostr(total_doors),
+		"    chests: "..tostr(chests_looted).."/"..tostr(total_chests),
+		"   enemies: "..tostr(enemies_destroyed)
 	})
 end
 
@@ -1301,9 +1386,9 @@ function make_enemy_spawn_point(x, y)
 	local spawn_time = rnd(100) + 150
 	sp = init_object(enemy_spawn_point_type, x, y)
 	sp.spawn_time,sp.spawn_timer = spawn_time,spawn_time
-	if difficulty <= 1.25 then
+	if difficulty <= 2.5 then
 		sp.enemy_types = {eye_type, bug_type}
-	elseif difficulty <= 2.25 then
+	elseif difficulty <= 3.5 then
 		sp.enemy_types = {eye_type, bug_type, fang_type}
 	else
 		sp.enemy_types = {eye_type, bug_type, fang_type, skull_type}
@@ -1464,7 +1549,7 @@ function init_object(type,x,y)
 				-- which should handle spawning pickups
 				if obj.type ~= player_type then
 					if rnd(1000) > 900 then
-						make_hp_pickup(obj.x,obj.y,flr((rnd(3) + 1)) * difficulty)
+						make_hp_pickup(obj.x,obj.y,ceil(rnd(difficulty) + 1))
 					-- elseif not has_started_boss_room and rnd(1000) > 100 then
 					-- 	make_gems_pickup(obj.x,obj.y,flr((rnd(5) + 3) * difficulty))
 					end
@@ -1782,10 +1867,10 @@ end
 -----------
 
 function start_room_transition(x_index, y_index)
-	if overload_portal ~= nil then
-		destroy_object(overload_portal)
-		overload_portal = nil
-	end
+	-- if overload_portal ~= nil then
+	-- 	destroy_object(overload_portal)
+	-- 	overload_portal = nil
+	-- end
 	
 	foreach(objects, function(obj)
 		if obj.type ~= player_type then
@@ -1831,9 +1916,9 @@ function start_room_transition(x_index, y_index)
 					add(objects, vendor)
 				end
 			elseif tile_type == UPGRADE_HP_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_max_hp)
+				place_upgrade_chest(c,r,tx,ty,upgrade_hp)
 			elseif tile_type == UPGRADE_DMG_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_projectile_damage)
+				place_upgrade_chest(c,r,tx,ty,upgrade_damage)
 			elseif tile_type == RICOCHET_TILE then
 				place_upgrade_chest(c,r,tx,ty,upgrade_projectile_ricochet)
 			elseif tile_type == PIERCE_TILE then
@@ -1841,7 +1926,7 @@ function start_room_transition(x_index, y_index)
 			-- elseif tile_type == SATCHEL_TILE then
 			-- 	place_upgrade_chest(c,r,tx,ty,upgrade_max_gems)
 			elseif tile_type == FAST_SHOT_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_fast_shot)
+				place_upgrade_chest(c,r,tx,ty,upgrade_fire_rate)
 			-- elseif tile_type == OVERLOAD_TILE then
 			-- 	place_upgrade_chest(c,r,tx,ty,upgrade_overload)
 			elseif tile_type == BOSS_TILE and room.x == 4 and room.y == 3 then
@@ -1920,12 +2005,21 @@ function goto_boss_room()
 	room.x = 4
 	room.y = 3
 	has_started_boss_room = true
-	difficulty = 4
 	camera_pos.x = tile_to_screen(4)
 	camera_pos.y = tile_to_screen(3)
 	player.x = 66 * TILE_SIZE
 	player.y = 49 * TILE_SIZE
-	player.hp = player.max_hp
+	-- player.hp = player.max_hp
+
+	-- testing vars ---
+	difficulty = 4.5
+	player.projectile_damage = 10
+	player.fire_rate = 10
+	player.max_hp = 40
+	player.has_pierce = true
+	player.has_ricochet = true
+	player.hp = 40
+
 	start_room_transition(room.x,room.y)
 	camera(camera_pos.x, camera_pos.y)
 	end_room_transition()
@@ -1936,48 +2030,48 @@ function goto_boss_room()
 	-- end)
 end
 
-function start_portal_transition(portal)
-	if room.x == 0 and room.y == 0 then
-		-- leaving main room
-		local open_pos = get_open_pos_next_to(last_portal_used.pos.x, last_portal_used.pos.y)
-		room.x,
-		room.y,
-		camera_pos.x,
-		camera_pos.y,
-		player.x,
-		player.y,
-		player.moves = last_portal_used.room.x,last_portal_used.room.y,last_portal_used.room.x * 128,last_portal_used.room.y * 128,open_pos.x,open_pos.y,{}
+-- function start_portal_transition(portal)
+-- 	if room.x == 0 and room.y == 0 then
+-- 		-- leaving main room
+-- 		local open_pos = get_open_pos_next_to(last_portal_used.pos.x, last_portal_used.pos.y)
+-- 		room.x,
+-- 		room.y,
+-- 		camera_pos.x,
+-- 		camera_pos.y,
+-- 		player.x,
+-- 		player.y,
+-- 		player.moves = last_portal_used.room.x,last_portal_used.room.y,last_portal_used.room.x * 128,last_portal_used.room.y * 128,open_pos.x,open_pos.y,{}
 
-		destroy_object(portal)
-		start_room_transition(room.x, room.y)
-	else
-		-- entering main room
-		last_portal_used.room.x,
-		last_portal_used.room.y,
-		last_portal_used.pos.x,
-		last_portal_used.pos.y,
-		room.x,
-		room.y,
-		camera_pos.x,
-		camera_pos.y,
-		player.x,
-		player.y,
-		player.moves = room.x,room.y,portal.x,portal.y,0,0,0,0,64,64,{}
+-- 		destroy_object(portal)
+-- 		start_room_transition(room.x, room.y)
+-- 	else
+-- 		-- entering main room
+-- 		last_portal_used.room.x,
+-- 		last_portal_used.room.y,
+-- 		last_portal_used.pos.x,
+-- 		last_portal_used.pos.y,
+-- 		room.x,
+-- 		room.y,
+-- 		camera_pos.x,
+-- 		camera_pos.y,
+-- 		player.x,
+-- 		player.y,
+-- 		player.moves = room.x,room.y,portal.x,portal.y,0,0,0,0,64,64,{}
 
-		start_room_transition(room.x, room.y)
-		-- init_object(portal_type, 56, 64)
-	end
-	camera(camera_pos.x, camera_pos.y)
-	end_room_transition()
-end
+-- 		start_room_transition(room.x, room.y)
+-- 		-- init_object(portal_type, 56, 64)
+-- 	end
+-- 	camera(camera_pos.x, camera_pos.y)
+-- 	end_room_transition()
+-- end
 
-function update_portal_transition()
-	end_portal_transition()
-end
+-- function update_portal_transition()
+-- 	end_portal_transition()
+-- end
 
-function end_portal_transition()
-	end_room_transition()
-end
+-- function end_portal_transition()
+-- 	end_room_transition()
+-- end
 
 -- death --
 -----------
@@ -2020,6 +2114,18 @@ death_window = {
 
 -- utils --
 -----------
+
+function increase_difficulty(amount)
+	difficulty += amount
+end
+
+function get_enemy_hp_for_difficulty(base_hp)
+	return base_hp * difficulty * enemy_hp_scale
+end
+
+function get_enemy_dmg_for_difficulty(base_dmg)
+	return base_dmg * difficulty * enemy_dmg_scale
+end
 
 function tile_to_screen(v)
 	return v * SCREEN_SIZE
@@ -2160,7 +2266,7 @@ __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000101020100000000000000000001010101010101010101010101010100010101010101010101020100000000000
+00000000000000000000000000000000000000101020101000000000000000001010101010101010101010101010100010101010101010101020100000000000
 00000000001093202020931000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000010203120100000000000000010102001202020202020012020b220100010c22020202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -2180,17 +2286,17 @@ __gfx__
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 102020202020c3222020202020202020202020202020202020202020202020202020202020202020931010101010101010209320202020202020100000000000
 00000000001093202020931000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202001202031202001202010101010102020202020202020202020202020101010102020202020202020202020201010202020202020202020100000000000
+10202001202031202001202010101010102020202020202020202020202020101010101010202020202020202020201010202020202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020012020200120202010000000101010011010011010011010011010100000102020202020202020202020101010102020202020101010100000000000
+10202020012020200120202010000000101010011010011010011010011010100000000010202020202020202020101010102020202020101010100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020200120012020202010000000102020202020202020202020202020100000102020202020202020602020302020302020209320202020100000000000
+10202020200120012020202010000000102020202020202020202020202020100000000010202020202020602020302020302020209320202020100000000000
 00000000001093202020931000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-102020202020202020202020100000001092202020602020202060202020c2100000102020202020202020202020101010102020202020202020100000000000
+102020202020202020202020100000001092202020602020202060202020c2100000000010202020202020202020101010102020202020202020100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202010000000102020202020202020202020202020100000102020202020202020202020201010202020202020202092100000000000
+10202020202020202020202010000000102020202020202020202020202020100000000010202020202020202020201010202020202020202092100000000000
 00000000001010202020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-93101010101010101010101010000000101010101010101010101010101010100000101010101010101010101010101010101010101010101010100000000000
+93101010101010101010101010000000101010101010101010101010101010100000000010101010101010101010101010101010101010101010100000000000
 00000000001093202020931000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 10101010101010101010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -2365,12 +2471,12 @@ __map__
 0102020239390505050505393901010101020201020202010000000102020239010110021001000000000000000000000000000000000000000001020202010000000001013902020202023901010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020239060202010000000102020201000102020201000000000000000000000000000000000000000001020202010000000001010202020202020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020202020202010000000102020201000102020239010101010000000000000000000000000101010139020202010000000001010202022302020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-010202020202020202020202020202010102020202020201000000010202020100010206020202022c01000000000000000000000000012b020202020602010000000001010202020202020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010202020202020202020202020202010102020202020201000000010202020100010206020202022901000000000000000000000000012b020202020602010000000001010202020202020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020302020202020202010000000102060201000102020202020202010000000000000000000000000102020202020202010000000001013902020202023901010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020202020202010000000102020201000102020202020202390101010101000001010101013902020202020202010000000001010101020202010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020202020202010000000102020201000102020202020202020202020201000001020202020202020202020202010000000000010101010201010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020639020202010101010102020201000102020202020202020210021001010101100210020202020202020602010000000000000001010201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020201020202020202020102020201000102020202020206020202100203020203021002020202060202020202010000000000000001010201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01020202020202020202020202020201010202010202020202020201020202010001022b0202020206020202100203020203021002020202060202020202010000000000000001010201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020202020202020202020202020101020201020202020202020302020201000102020202020202020210021001010101100210020202020202020202010000000000000001390239010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 01020202020202020202020202020201012b0202020202020202020102020201000102020202020202020202020201000001020202020202020202020202010000000000000001010201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0101010101010101010101010101010101010101010101010102010101010101000101010101010101010101010101000001010101010101010201010101010000000000000001010201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -2380,15 +2486,15 @@ __map__
 0101020100010202021002020201000000000000000001020202020201000000000000000000000000000000000000000000000000010210020202020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0101020100010202020202020201000000000000000001020202020201000000000000000000000000000000000000000000000000010202020202020201000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020100010202020202020201000001010101010139020202020201000000000000000000000000000000000000000000000000010202020202020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102130100010202020602020201000001020202020202020202020201000000000000000000000000000000000000000000000000010202060206020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101020100010101010101010101000001020202020202020202020201000000000000000000000000000000000000000000000000010202020202020201000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101020100000000000000000000000001020202020202020202020201000000000101010101010101010101010000000000000000010202060206020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-010202010101010101010101010000000102020202020239010101010100000000012c022901020202020206010000000000000000010202020202020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102130202020210020602100100000001020202020202010000000000000000000102220201020202020202010101010101010101010202020202021001000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-010102020101010201010102010101010113020202020201010101010101010101010c191001020202020202391002022c02021010390202020202100201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101020201000102010001020202100101033902020202060202020202021002023902100210060202020213031002020202021010031302020210022901000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020201000102010101020210020202020102020202020202020602021002020313020202020202020202010101010101010101010101010201010101000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-01022b0201000102020202020202100101010101010301060202020202020101010102020202020202020202010000000000000000000000010201000000000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102130100010202020602020201000001130202020202020206020201000000000000000000000000000000000000000000000000010202060206020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020100010101010101010101000001033901390202020202020201000000000000000000000000000000000000000000000000010202020202020201000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020100000001010101010000000001020100010202020202020201000000000101010101010101010101010000000000000000010202060206020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010202010101010102290201010000000110010001020239010101010100000000012b022901020202020206010000000000000000010202020202020201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102130202020210020602100100000001020100010202010000000000000000000102220201020202020202010101010101010101010202020202021001000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010102020101010201010102010101010110010001020201010101010101010101010c191001020202020202391002022c02021010390202020202100201000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020201000102010001020202100101020100010202020202020202021002023902100210060202020213031002020202021010031302020210022901000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01020202010001020101010202100202021001000103010202062c0602021002020313020202020202020202010101010101010101010101010201010101000000000000000139020202390100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01022b0201000102020202020202100101010100010201020202020202020101010102020202020202020202010000000000000000000000010201000000000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0101010101010101010101010101010100000000010201010101010101010100000101010101010101010101010000000000000000000000010201000000000000000000000101020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
 000100001952019550185301653013510115100e5100b520075200152000520123001430017300113001430016300193001b3000970009700097001500013000120001100011000100000e0000d0000c0000b000
