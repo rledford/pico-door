@@ -213,13 +213,12 @@ function _init()
 		"      🅾️ - shoot",
 		"      ❎ - interact",
 		"",
-		"break down the doors.",
-		"loot chest.",
-		"don't get doid",
-		"",
-		"!! destroy that huge door !!",
+		"   break down the doors   ",
+		"     loot every chest     ",
+		" find the goblet of grail ",
+		"      don't get doid      ",
 	}, 750)
-	goto_boss_room()
+	-- goto_boss_room()
 end
 
 function calculate_stat_totals_from_map()
@@ -447,7 +446,7 @@ vendor_type = {
 		false
 	end,
 	update=function(this)
-		this.can_interact = window == nil and player ~= nil and not player.dead and flr(get_range(this, player)) <= TILE_SIZE*2
+		this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE*2
 		if this.can_interact and btnp(k_action) then
 			show_toast_message({
 				"i am the all powerful lunkik.",
@@ -778,25 +777,31 @@ projectile_type = {
 				col.take_damage(this.damage)
 				add(this.hit_list, col)
 			end
-			if not this.pierce then
+			if not this.pierce or col.type == door_type  or col.type == chest_type then
 				destroy_object(this)
 			end
 		end
-		if not this.ignore_walls and not this.can_move_through(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
-			if this.ricochet then
-				this.hit_list = {}
-				-- cheap bounce calc without normals since all walls are axis-aligned
-				if not this.can_move_through(pos_to_tile(this.x + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
-					-- hit top or bottom of wall so reverse y
-					this.direction.y *= -1
-				elseif not this.can_move_through(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(this.y + TILE_HALF_SIZE)) then
-					-- hit left or right of wall so reverse x
-					this.direction.x *= -1
+		if not this.ignore_walls then
+			local t = mget(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE))
+			local is_blocked = t == WALL_TILE or t == BLOCK_TILE
+			local is_enemy_hitting_door = t == DOOR_TILE and this.group ~= ENEMY_GROUP
+
+			if is_blocked or is_enemy_hitting_door then
+				if this.ricochet then
+					this.hit_list = {}
+					-- cheap bounce calc without normals since all walls are axis-aligned
+					if not this.can_move_through(pos_to_tile(this.x + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
+						-- hit top or bottom of wall so reverse y
+						this.direction.y *= -1
+					elseif not this.can_move_through(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(this.y + TILE_HALF_SIZE)) then
+						-- hit left or right of wall so reverse x
+						this.direction.x *= -1
+					end
+					-- skip setting position to nextx,nexty to prevent drilling through corners
+					return
+				else
+					destroy_object(this)
 				end
-				-- skip setting position to nextx,nexty to prevent drilling through corners
-				return
-			else
-				destroy_object(this)
 			end
 		end
 		this.x = nextx
@@ -841,11 +846,21 @@ shield_type = {
 moose_type = {
 	init=function(this)
 		this.anim,
+		this.can_interact,
 		this.direction,
-		this.spd = make_animation({35,36}, 8),{x=1,y=0},0.5
+		this.spd =
+			make_animation({35,36}, 8), -- animation
+			false, -- can interact
+			{x=1,y=0}, -- direction
+			0.5 -- speed
 	end,
 	update=function(this)
 		this.anim.update()
+		this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE
+		if this.can_interact and btnp(k_action) then
+			-- show toasts dialog and then player stats
+			-- show win screen
+		end
 		-- plan_next_move(this)
 		-- this.x += this.direction.x * this.spd
 		-- if not this.can_move_to(pos_to_tile(this.x + TILE_HALF_SIZE), pos_to_tile(this.y + TILE_HALF_SIZE)) then
@@ -871,19 +886,19 @@ eye_type = {
 		this.anim,
 		this.touch_damage,
 		this.projectile_damage,
-		this.is_enemy=
+		this.is_enemy =
 			90, -- fire rate
 			0, -- fire timer
 			{x=2,y=3,w=4,h=5}, -- hitbox
 			nil, -- target
 			40, -- auto target radius
 			ENEMY_GROUP, -- group
-			3, -- hp
+			get_enemy_hp_for_difficulty(2), -- hp
 			30, -- move rate
 			0, -- move timer
 			make_animation({48,49}, 16), -- anim
-			2, -- touch damage
-			2, -- range damage
+			3, -- touch damage
+			3, -- range damage
 			true -- is enemy
 	end,
 	update=function(this)
@@ -923,16 +938,16 @@ bug_type = {
 		this.move_rate,
 		this.move_timer,
 		this.touch_damage,
-		this.is_enemy=
+		this.is_enemy =
 			{x=1,y=2,w=6,h=5}, -- hitbox
 			nil, -- target
 			40, -- auto target radius
 			make_animation({50,51}, 25), -- anim
 			ENEMY_GROUP, -- group
-			4, -- hp
+			get_enemy_hp_for_difficulty(4), -- hp
 			15, -- move rate
 			0, -- move timer
-			3, -- touch damage
+			4, -- touch damage
 			true -- is enemy
 	end,
 	update=function(this)
@@ -941,7 +956,7 @@ bug_type = {
 			this.move_timer = this.move_rate
 			plan_next_move(this)
 		end
-		this.anim.update() 
+		this.anim.update()
 	end
 }
 
@@ -956,16 +971,16 @@ fang_type = {
 		this.move_rate,
 		this.move_timer,
 		this.touch_damage,
-		this.is_enemy=
+		this.is_enemy =
 			{x=1,y=2,w=6,h=5}, -- hitbox
 			nil, -- target
 			40, -- auto target radius
 			make_animation({53,54}, 40), -- animation
 			ENEMY_GROUP, -- group
-			5, -- hp
+			get_enemy_hp_for_difficulty(5), -- hp
 			5, -- move rate
 			0, -- move timer
-			4, -- touch damage
+			6, -- touch damage
 			true -- is enemy
 	end,
 	update=function(this)
@@ -992,17 +1007,17 @@ skull_type = {
 		this.projectile_damage,
 		this.fire_rate,
 		this.fire_timer,
-		this.is_enemy=
+		this.is_enemy =
 			{x=1,y=2,w=6,h=5}, -- hitbox
 			nil, -- target
 			40, -- auto target radius
 			make_animation({55,56}, 30), -- anim
 			ENEMY_GROUP, -- group
-			6, -- hp
+			get_enemy_hp_for_difficulty(6), -- hp
 			5, -- move rate
 			0, -- move timer
-			3, -- touch damage
-			0, -- projectile damage
+			5, -- touch damage
+			4, -- projectile damage
 			45, --fire rate
 			0, -- fire timer
 			true -- is enemy
@@ -1246,7 +1261,7 @@ artifact_type = {
 	end,
 	update=function(this)
 		-- spawn particle periodically
-		this.can_interact = window == nil and player ~= nil and not player.dead and flr(get_range(this, player)) <= TILE_SIZE
+		this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE
 		if this.can_interact and btnp(k_action) then
 			has_attempted_artifact_activation = true
 			if is_all_powerful then
@@ -1275,7 +1290,7 @@ mirror_type = {
 		false,true
 	end,
 	update=function(this)
-		this.can_interact = window == nil and player ~= nil and not player.dead and flr(get_range(this, player)) <= TILE_SIZE
+		this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE
 		if this.can_interact and btnp(k_action) then
 			show_player_stats_toast()
 		end
@@ -1455,30 +1470,46 @@ end
 function init_object(type,x,y)
 	local obj = {}
 
-	obj.type,obj.collidable,obj.targetable,obj.flip,obj.x,obj.y,obj.hitbox,obj.spd,
-	obj.moves,obj.group,obj.hp,obj.anim,obj.is_hurt,obj.hurt_duration,
-	obj.hurt_duration_timer,obj.hurt_collidable,obj.static,obj.touch_damage,
-	can_interact,is_enemy =
-	type,
-	true,
-	true,
-	{x=false,y=false},
-	x,
-	y,
-	{x=0,y=0,w=TILE_SIZE,h=TILE_SIZE},
-	1,
-	{},
-	NO_GROUP,
-	1,
-	nil,
-	false,
-	30,
-	0,
-	true,
-	false,
-	0,
-	false,
-	false
+	obj.type,
+	obj.collidable,
+	obj.targetable,
+	obj.flip,
+	obj.x,
+	obj.y,
+	obj.hitbox,
+	obj.spd,
+	obj.moves,
+	obj.group,
+	obj.hp,
+	obj.anim,
+	obj.is_hurt,
+	obj.hurt_duration,
+	obj.hurt_duration_timer,
+	obj.hurt_collidable,
+	obj.static,
+	obj.touch_damage,
+	obj.can_interact,
+	obj.is_enemy =
+	type, -- type
+	true, -- collidable
+	true, -- targetable
+	{x=false,y=false}, -- flip
+	x, -- pos y
+	y, -- pos x
+	{x=0,y=0,w=TILE_SIZE,h=TILE_SIZE}, -- hitbox
+	1, -- speed
+	{}, -- moves
+	NO_GROUP, -- group
+	1, -- hp
+	nil, -- anim
+	false, -- is hurt
+	30, -- hurt duration
+	0, -- hurt duration timer
+	true, -- hurt collidable
+	false, -- static
+	0, -- touch damage
+	false, -- can interact
+	false -- is enemey
 
 	obj.collide=function(groups)
 		local other
@@ -1623,7 +1654,10 @@ end
 function start_hurt_object(obj)
 	obj.is_hurt,
 	obj.hurt_duration_timer,
-	obj.collidable = true,obj.hurt_duration,obj.hurt_collidable
+	obj.collidable =
+		true,
+		obj.hurt_duration,
+		obj.hurt_collidable
 end
 
 function update_hurt_object(obj)
@@ -1656,7 +1690,7 @@ function add_random_move(obj)
 end
 
 function plan_next_move(obj)
-	if player == nil or count(obj.moves) > 0 then
+	if player == nil or count(obj.moves) > 0 or obj.is_hurt then
 		return
 	end
 	local range = get_range(obj, player)
@@ -1893,7 +1927,8 @@ function start_room_transition(x_index, y_index)
 			ty = r*TILE_SIZE
 			tile_type = mget(c,r)
 			if tile_type == DOOR_TILE then
-				mset(c,r,NO_PASS_FLOOR_TILE)
+				-- this does allow projectiles to go through doors when "pierce" is true
+				mset(c,r,DOOR_TILE)
 				init_object(door_type, tx, ty)
 			elseif tile_type == ENEMY_SPAWN_TILE then
 				make_enemy_spawn_point(tx,ty)
@@ -1935,7 +1970,7 @@ function start_room_transition(x_index, y_index)
 				mset(c,r,FLOOR_TILE)
 				init_object(moose_type,tx,ty)
 			elseif tile_type == MIRROR_TILE then
-				mset(c,r,NO_PASS_FLOOR_TILE)
+				mset(c,r,BLOCK_TILE)
 				init_object(mirror_type,tx,ty)
 			elseif tile_type == ARTIFACT_TILE then
 				mset(c,r,NO_PASS_FLOOR_TILE)
@@ -2114,6 +2149,10 @@ death_window = {
 
 -- utils --
 -----------
+
+function check_player_can_interact()
+	return window == nil and player ~= nil and not player.dead
+end
 
 function increase_difficulty(amount)
 	difficulty += amount
