@@ -461,18 +461,6 @@ vendor_type = {
 	end,
 }
 
--- upgrade_max_gems = {
--- 	spr = SATCHEL_TILE,
--- 	name = "put the money in the bag",
--- 	description = "+50 to max gems",
--- 	cost = 50,
--- 	persist = true,
--- 	on_upgrade = function()
--- 		player.max_gems += 50
--- 		difficulty *= 1.05
--- 	end
--- }
-
 upgrade_hp = {
 	spr = UPGRADE_HP_TILE,
 	name = "let me live",
@@ -558,94 +546,6 @@ upgrade_projectile_lifetime = {
 	end
 }
 
--- upgrade_overload = {
--- 	spr = OVERLOAD_TILE,
--- 	name = "portal 3",
--- 	description = "spawn portal on full gems",
--- 	cost = 750,
--- 	persist = false,
--- 	on_upgrade = function()
--- 		player.has_overload = true
--- 	end
--- }
-
--- function show_vendor_window(vendor_obj)
--- 	sfx(8)
--- 	local win = {
--- 		selected_upgrade = 1,
--- 		update = function(this)
--- 			if btnp(k_action) then
--- 				window = nil
--- 				update_fn = game_update
--- 				sfx(9)
--- 				return
--- 			elseif btnp(k_shoot) then
--- 				local upgrade = vendor_obj.inventory[this.selected_upgrade]
--- 				if player.gems - upgrade.cost < 0 then
--- 					sfx(10)
--- 					return
--- 				end
--- 				if not upgrade.persist then
--- 					del(vendor_obj.inventory, upgrade)
--- 					this.selected_upgrade = clamp(this.selected_upgrade, 1, count(vendor_obj.inventory))
--- 				end
--- 				sfx(11)
--- 				player.gems -= upgrade.cost
--- 				upgrade.on_upgrade()
--- 			elseif btnp(k_left) then
--- 				this.selected_upgrade = clamp(this.selected_upgrade-1, 1, count(vendor_obj.inventory))
--- 			elseif btnp(k_right) then
--- 				this.selected_upgrade = clamp(this.selected_upgrade+1, 1, count(vendor_obj.inventory))
--- 			end
--- 		end,
--- 		draw = function(this)
--- 			local window_rect,
--- 			pad,
--- 			gems_text,
--- 			hp_text = {left=camera_pos.x + 8, top=camera_pos.y+40,
--- 			right=camera_pos.x + 119, bottom=camera_pos.y + 99},
--- 			4,
--- 			tostr(player.gems).."/"..tostr(player.max_gems),
--- 			tostr(player.hp).."/"..tostr(player.max_hp)
-
--- 			rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 13)
--- 			rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 2)
--- 			print("lunkik", window_rect.left + pad, window_rect.top + pad/2, 2)
--- 			spr(HP_TILE, window_rect.right - text_w_px(hp_text) - TILE_SIZE - 2, window_rect.top)
--- 			print(hp_text, window_rect.right - text_w_px(hp_text) - pad/2, window_rect.top + pad/2, 2)
--- 			spr(GEM_TILE, window_rect.right - text_w_px(gems_text) - TILE_SIZE - 1, window_rect.top + 6)
--- 			print(gems_text, window_rect.right - text_w_px(gems_text) - pad/2, window_rect.top + pad/2 + 6, 11)
--- 			local itemx
--- 			for i=0,count(vendor_obj.inventory)-1 do
--- 				itemx = window_rect.left + 32 + TILE_SIZE * i + pad + (pad * i)
--- 				itemy = window_rect.top + pad*2 + TILE_SIZE + 3
--- 				rectfill(itemx-1, itemy-1, itemx + TILE_SIZE, itemy + TILE_SIZE, 0)
--- 				spr(vendor_obj.inventory[i+1].spr, itemx, itemy)
--- 				if i+1 == this.selected_upgrade then
--- 					print("🅾️",itemx,itemy+TILE_SIZE+3,2)
--- 					rect(itemx-2, itemy-2, itemx + TILE_SIZE + 1, itemy + TILE_SIZE + 1, 2)
--- 				end
--- 			end
-
--- 			local details_left,
--- 			details_top,
--- 			details_line_h =
--- 				window_rect.left + pad,
--- 				window_rect.top + 37,8
-
--- 			print(vendor_obj.inventory[this.selected_upgrade].name, details_left, details_top, 10)
--- 			print(vendor_obj.inventory[this.selected_upgrade].description, details_left, details_top + details_line_h,7)
--- 			spr(GEM_TILE, details_left - 2, details_top + details_line_h * 2 - 2)
--- 			print(vendor_obj.inventory[this.selected_upgrade].cost, details_left + 5,  details_top  + details_line_h * 2, 11)
--- 		end
--- 	}
--- 	window = win
--- 	update_fn = function()
--- 		vendor_obj.type.update(vendor_obj)
--- 		window.update(window)
--- 	end
--- end
-
 -- toast message --
 -------------------
 function show_toast_message(text_list,lifetime)
@@ -727,20 +627,6 @@ function make_pickup(x, y, anim, pickup_range, can_expire)
 		
 	return pickup
 end
-
--- function make_gems_pickup(x, y, amount)
--- 	local pickup = make_pickup(x, y, make_animation({28,29}, 10), 18, true)
--- 		pickup.on_pickup = function()
--- 			player.gems = clamp(player.gems + amount, 0, player.max_gems)
--- 			destroy_object(pickup)
--- 			if not has_started_boss_room and player.gems == player.max_gems and player.has_overload and overload_portal == nil then
--- 				local pos = get_open_pos_next_to(flr(player.x / TILE_SIZE) * TILE_SIZE, flr(player.y / TILE_SIZE) * TILE_SIZE)
--- 				overload_portal = init_object(portal_type, pos.x, pos.y)
--- 			end
--- 		end
-	
--- 	return pickup
--- end
 
 function make_hp_pickup(x, y, amount)
 	local pickup = make_pickup(x, y, make_animation({26,27}, 16), 16,true)
@@ -1335,45 +1221,6 @@ function show_player_stats_toast()
 		"    enemies: "..tostr(enemies_destroyed)
 	})
 end
-
-
--- portal --
-------------
-
--- portal_type = {
--- 	init=function(this)
--- 		this.frames,
--- 		this.frame_times,
--- 		this.current_frame,
--- 		this.frame_time,
--- 		this.frame_step = {21,22,23,24},{15,15,15,15},1,0,1
--- 		this.on_interact = function()
--- 			start_portal_transition(this)
--- 		end
--- 		this.is_boss_portal = false
--- 	end,
--- 	update=function(this)
--- 		this.can_interact = player ~= nil and not player.dead and player.x == this.x and player.y == this.y
--- 		if this.can_interact and btnp(k_action) then
--- 			this.on_interact()
--- 		end
--- 		this.frame_time += 1
--- 		if this.frame_time >= this.frame_times[this.current_frame] then
--- 			this.frame_time = 0
--- 			if this.current_frame == count(this.frames) then
--- 				this.frame_step = -1
--- 			elseif this.current_frame == 1 and this.frame_step == -1 then
--- 				this.frame_step = 1
--- 				this.frame_time = 0
--- 				return
--- 			end
--- 			this.current_frame += this.frame_step
--- 		end
--- 	end,
--- 	draw=function(this)
--- 		spr(this.frames[this.current_frame], this.x, this.y, 1, 1, this.frame_step == -1)
--- 	end
--- }
 
 -- enemy spawn point --
 -----------------------
@@ -2341,14 +2188,14 @@ __gfx__
 0000000000000000500050007f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c454454440008280000028200003ff33000c7cc000ccc1c0000c1cc00
 0000000050005000550055007ffffff7767777670c0cccc00c00ccc00c000cc00c0000c04454454400008000000020000003300000c77c000000cc00000cc000
 555055505550555055505550677667766776677600cccc0000cccc0000cccc0000cccc0095999599000000000000000000000000000cc0000000000000000000
-003330000000000067777776f000000ff000000f000220000002200044444444000000000ccc000000111000022002200c7c000000ffff000000000000000000
-0053500000000000867ff768f000000ff000000f002112000021120044444444000000000711cccc0011110c278228820c77cccc0ffffaf00099990000aaaa00
-0018100000000000786556780f0000f00f0000f00028e200002e820044444444000000007771111c0110111c777888827777711c0ffffff0099aa9900aa99aa0
-0353530000000000785ff5870044440000444400025115200251152066666666000000000711711c011001cc278878820c77171c0ff5faf009a99a900a9aa9a0
-033533000000000087fb3f780454450000544540021b31200213b1209949994900000000c11777c01100cccc28877782c17117700ff5ff0009a99a900a9aa9a0
-085358000000000078f3bf8700411440044114000213b120021b31204444444400000000c11171c01100000002887820c11777770fffaf00099aa9900aa99aa0
-0030300000000000887ff8880444440000444440020dd020020dd0204444444400000000cccc11c01000000000288200cccc177000faf0000099990000aaaa00
-0030300000000000878ff7780000044004400000020dd020020dd02094999499000000000000ccc010000000000220000000c7c000ff00000000000000000000
+003330000035100067777776f000000ff000000f000220000002200044444444000000000ccc000000111000022002200c7c000000ffff000000000000000000
+0053500000338000867ff768f000000ff000000f002112000021120044444444000000000711cccc0011110c278228820c77cccc0ffffaf00099990000aaaa00
+0018100000351000786556780f0000f00f0000f00028e200002e820044444444000000007771111c0110111c777888827777711c0ffffff0099aa9900aa99aa0
+0353530003535300785ff5870044440000444400025115200251152066666666000000000711711c011001cc278878820c77171c0ff5faf009a99a900a9aa9a0
+033533000335330087fb3f780454450000544540021b31200213b1209949994900000000c11777c01100cccc28877782c17117700ff5ff0009a99a900a9aa9a0
+085358000853580078f3bf8700411440044114000213b120021b31204444444400000000c11171c01100000002887820c11777770fffaf00099aa9900aa99aa0
+0030300000303000887ff8880444440000444440020dd020020dd0204444444400000000cccc11c01000000000288200cccc177000faf0000099990000aaaa00
+0030300000303000878ff7780000044004400000020dd020020dd02094999499000000000000ccc010000000000220000000c7c000ff00000000000000000000
 00003000000000000111111001111110000000000009900000999900000000000e2ee2e09000000000000009099999900000000044444440a000000000000000
 000330000000300011111111011111100000000009299290009229000e2ee2e0022ee220000a00000090a000900dd009444444404898984000ee920000e22200
 00333300000330001211112111111111008888000299992009722790022ee220022ee2200009990000a99900900dd0094898984049999940a2e22ee0029ee9e0
