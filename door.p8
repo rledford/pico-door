@@ -485,7 +485,7 @@ upgrade_hp = {
 	-- cost = 100,
 	-- persist = true,
 	on_upgrade = function()
-		player.max_hp += 2.5
+		player.max_hp += 3.75
 		player.hp = player.max_hp
 		increase_difficulty(0.15)
 	end
@@ -748,7 +748,7 @@ end
 -- end
 
 function make_hp_pickup(x, y, amount)
-	local pickup = make_pickup(x, y, make_animation({26,27}, 16), 10,true)
+	local pickup = make_pickup(x, y, make_animation({26,27}, 16), 16,true)
 		pickup.on_pickup =	function(player)
 				player.hp = clamp(player.hp + amount, player.hp, player.max_hp)
 				destroy_object(pickup)
@@ -810,7 +810,7 @@ projectile_type = {
 		end
 		if not this.ignore_walls then
 			local t = mget(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE))
-			local is_blocked = t == WALL_TILE or t == BLOCK_TILE
+			local is_blocked = t == WALL_TILE or t == BLOCK_TILE or (t == BOSS_TILE and not has_started_boss_room)
 			local is_enemy_hitting_door = t == DOOR_TILE and this.group ~= ENEMY_GROUP
 
 			if is_blocked or is_enemy_hitting_door then
