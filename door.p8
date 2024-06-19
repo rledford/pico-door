@@ -222,7 +222,7 @@ function _init()
 		" find the goblet of grail ",
 		"      don't get doid      ",
 	}, 750)
-	-- goto_boss_room()
+	start_win_sequence()
 end
 
 function calculate_stat_totals_from_map()
@@ -301,12 +301,7 @@ function game_update()
 		obj.move()
 	end)
 	update_particles()
-	if toast_msg_window != nil then
-		toast_msg_window.update(toast_msg_window)
-	elseif count(toast_msg_queue) > 0 then
-		toast_msg_window = toast_msg_queue[1]
-		del(toast_msg_queue, toast_msg_window)
-	end
+	update_toasts()
 	if not is_all_powerful then
 		is_all_powerful = chests_looted == total_chests
 		if is_all_powerful and not has_shown_is_all_powerful_msg then
@@ -1697,6 +1692,15 @@ function update_hurt_object(obj)
 	end
 end
 
+function update_toasts()
+	if toast_msg_window != nil then
+		toast_msg_window.update(toast_msg_window)
+	elseif count(toast_msg_queue) > 0 then
+		toast_msg_window = toast_msg_queue[1]
+		del(toast_msg_queue, toast_msg_window)
+	end
+end
+
 function add_random_move(obj)
 	if count(obj.moves) ~= 0 then
 		return
@@ -2179,6 +2183,53 @@ death_window = {
 		print("press x to restart", window_rect.left + 21, window_rect.bottom - pad * 2, 7)
 	end
 }
+
+-- win --
+---------
+
+function start_win_sequence()
+	show_toast_message({
+		"!! eeeeeeeeeeeeeeeeeeeeeee !!"
+	})
+	show_toast_message({
+		"penetant one! i mean...",
+		"",
+		"all powerful one!",
+	})
+	show_toast_message({
+		"the goblet of grail is",
+		"not what it seems <panting>"
+	})
+	show_toast_message({
+		"it makes you immortal but...",
+		"life becomes a never-ending",
+		"grind full of neck problems.",
+	})
+	show_toast_message({
+		"you get suuuuuper old <gags>",
+		"because that's what happens",
+		"when you can't get doid."
+	})
+	show_toast_message({
+		"destroy the grail or...",
+		"<sighs>",
+		"take it knowing it's probably",
+		"a bad idea.",
+	})
+	update_fn = win_update
+end
+
+function win_update()
+	foreach(objects,function(obj)
+		if obj ~= player and obj.type.update~=nil then
+			obj.type.update(obj)
+		end
+	end)
+	update_toasts()
+	if count(toast_msg_queue) == 0 then
+		update_fn = game_update
+	end
+end
 
 -- utils --
 -----------
