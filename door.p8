@@ -188,7 +188,10 @@ doors_destroyed,
 total_doors,
 enemies_destroyed,
 chests_looted,
-total_chests = 0,0,0,0,0
+total_chests,
+total_dmg_dealt,
+total_dmg_taken = 0,0,0,0,0,0,0
+
 
 -- boss --
 ----------
@@ -196,6 +199,8 @@ is_all_powerful = false
 has_shown_is_all_powerful_msg = false
 has_started_boss_room = false
 has_spoken_to_moose = false
+did_anger_moose = false
+did_take_the_artifact = true
 has_started_win_sequence = false
 max_boss_hp = 1 --12000
 boss_hp = max_boss_hp
@@ -212,17 +217,18 @@ function _init()
 	calculate_stat_totals_from_map()
 	start_room_transition(0,0)
 	update_fn = game_update
-	show_toast_message({
-		"⬆️⬇️⬅️➡️ - move",
-		"      🅾️ - shoot",
-		"      ❎ - interact",
-		"",
-		"   break down the doors   ",
-		"     loot every chest     ",
-		" find the goblet of grail ",
-		"      don't get doid      ",
-	}, 750)
-	goto_boss_room()
+	-- show_toast_message({
+	-- 	"⬆️⬇️⬅️➡️ - move",
+	-- 	"      🅾️ - shoot",
+	-- 	"      ❎ - interact",
+	-- 	"",
+	-- 	"   break down the doors   ",
+	-- 	"     loot every chest     ",
+	-- 	" find the goblet of grail ",
+	-- 	"      don't get doid      ",
+	-- }, 750)
+	--goto_boss_room()
+	start_win_sequence()
 end
 
 function calculate_stat_totals_from_map()
@@ -284,7 +290,9 @@ function _draw()
 	-- 	end
 	-- end
 	-- print(tostr(difficulty), 0,16,8)
-	draw_ui()
+	if not has_started_win_sequence then
+		-- draw_ui()
+	end
 end
 
 -- game update --
@@ -343,6 +351,7 @@ player_type = {
 		this.dead = false
 	end,
 	take_damage=function(this, amt)
+		total_dmg_taken += amt
 		if this.dead then
 			return
 		end
@@ -537,13 +546,11 @@ upgrade_projectile_lifetime = {
 -------------------
 function show_toast_message(text_list,lifetime,callback)
 	local line_count = count(text_list)
-	local tmp_w,w,h,pad,lifetime = 0,0,line_count * 4,2,lifetime or 600
-	foreach(text_list, function(msg)
-		tmp_w = text_w_px(msg)
-		if tmp_w > w then
-			w = tmp_w
-		end
-	end)
+	local w,h,pad,lifetime = 
+	get_total_text_width(text_list), -- w
+	count(text_list) * 4, -- h
+	2, -- pad
+	lifetime or 600 -- lifetime
 	w += pad * 2
 	h += pad * 2 + line_count * 2
 	local toast = {
@@ -746,36 +753,34 @@ moose_type = {
 	init=function(this)
 		this.anim,
 		this.can_interact,
-		this.direction,
-		this.spd =
+		this.is_speaking,
+		this.explode_in_anger_timer =
 			make_animation({35,36}, 8), -- animation
 			false, -- can interact
-			{x=1,y=0}, -- direction
-			0.5 -- speed
-		this.is_angry = false
-		this.is_speaking = false
-		this.explode_in_anger_timer = 100
+			false, -- is speaking
+			150 -- explode timer
 	end,
 	update=function(this)
-		if this.is_angry then
+		if did_anger_moose then
 			this.explode_in_anger_timer -= 1
 			if this.explode_in_anger_timer <= 0 then
 				destroy_object(this)
 				for i=0,10 do
 					make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame], 500)
 				end
+				mset(pos_to_tile(this.x),pos_to_tile(this.y), FLOOR_TILE)
 				show_toast_message({
 					"         r.i.p.        ",
 					"       mr. mooshe      "
-				},200)
+				},80)
 				return
 			end
 		end
 		this.anim.update()
-		this.can_interact = check_player_can_interact() and not this.is_speaking and not this.is_angry and flr(get_range(this, player)) <= TILE_SIZE
+		this.can_interact = check_player_can_interact() and not this.is_speaking and not did_anger_moose and flr(get_range(this, player)) <= TILE_SIZE
 		if this.can_interact and btnp(k_action) then
-			if has_spoken_to_moose and not this.is_angry then
-				this.is_angry = true
+			if has_spoken_to_moose and not did_anger_moose then
+				did_anger_moose = true
 				show_toast_message({
 					"destroy it or don't!",
 					"<gets unreasonably angry>",
@@ -1215,9 +1220,13 @@ artifact_type = {
 		ENEMY_GROUP
 	end,
 	update=function(this)
-		this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE
 		this.collidable = has_spoken_to_moose
 		this.targetable = has_spoken_to_moose
+		if not has_started_boss_room then
+			this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE
+		else
+			this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE and has_spoken_to_moose
+		end
 		if this.can_interact and btnp(k_action) then
 			if has_spoken_to_moose then
 				player.can_move = false
@@ -1229,7 +1238,7 @@ artifact_type = {
 					"     <mrrrrggghllhlhlh>     "
 				},
 				600,
-				start_evil_win_sequence
+				start_win_sequence
 			)
 				return
 			end
@@ -1262,7 +1271,7 @@ artifact_type = {
 				"          <boom>            "
 			},
 			600,
-			start_good_win_sequence
+			start_win_sequence
 		)
 	end
 }
@@ -1286,18 +1295,67 @@ mirror_type = {
 }
 
 function show_player_stats_toast()
-	show_toast_message({
+	local msg = {
 		"     health: "..tostr(flr(player.hp)).."/"..tostr(player.max_hp),
 		"     damage: "..tostr(player.projectile_damage),
 		"  fire dist: "..tostr(flr(30/player.projectile_speed/player.projectile_lifetime*30)*8),
 		"  fire rate: "..tostr(30/player.fire_rate).."/sec",
 		"target dist: "..tostr(player.auto_target_radius),
-		" difficulty: "..tostr(difficulty),
+		" difficulty: "..tostr(difficulty), -- remove this once final diff confirmed
 		"- - - - - - - - - - -",
+	}	
+	add_each(msg, get_brief_world_stat_text())
+	show_toast_message(msg)
+end
+
+function get_brief_world_stat_text()
+	local stat_text = {
 		"      doors: "..tostr(doors_destroyed).."/"..tostr(total_doors),
 		"     chests: "..tostr(chests_looted).."/"..tostr(total_chests),
 		"    enemies: "..tostr(enemies_destroyed)
-	})
+	}
+
+	return stat_text
+end
+
+function get_win_stat_text()
+	local stat_text = get_brief_world_stat_text()
+	local extra_text = {
+		"  dmg dealt: "..total_dmg_dealt,
+		"  dmg taken: "..total_dmg_taken,
+		"",
+		"",
+		"       ★ achievements ★        ",
+		""
+	}
+	-- add more with add_each(stat_text, rest)
+	if doors_destroyed >= total_doors then
+		add_each(extra_text,{
+			"◆ door reaper",
+			"     - doid, doid, doid..."
+		})
+	end
+	if did_anger_moose then
+		add_each(extra_text,{
+			"◆ annoyer of moose",
+			"     - he 'sploded"
+		})
+	end
+	if did_take_the_artifact then
+		add_each(extra_text,{
+			"◆ neck problems",
+			"     - take the goblet of grail"
+		})
+	else
+		add_each(extra_text,{
+			"◆ no thanks",
+			"     - doid the goblet of grail"
+		})
+	end
+
+	add_each(stat_text,extra_text)
+
+	return stat_text
 end
 
 -- enemy spawn point --
@@ -1513,6 +1571,9 @@ function init_object(type,x,y)
 	obj.take_damage = function(amount)
 		if obj.type.take_damage ~= nil then
 			obj.type.take_damage(obj, amount)
+			if obj.is_enemy then
+				total_dmg_dealt += amount
+			end
 		else
 			obj.hp -= amount
 			if obj.hp <= 0 then
@@ -1904,7 +1965,7 @@ function start_room_transition(x_index, y_index)
 			elseif tile_type == BOSS_TILE and room.x == 4 and room.y == 3 then
 				init_object(boss_door_type,tx,ty)
 			elseif tile_type == MOOSE_TILE then
-				mset(c,r,FLOOR_TILE)
+				mset(c,r,NO_PASS_FLOOR_TILE)
 				init_object(moose_type,tx,ty)
 			elseif tile_type == MIRROR_TILE then
 				mset(c,r,BLOCK_TILE)
@@ -2036,23 +2097,49 @@ death_window = {
 -- win --
 ---------
 
-function start_good_win_sequence()
-	has_started_win_sequence = true
-	show_toast_message({"the 'good' win sequence"})
-	update_fn = win_update
-end
+win_window_restart_timer = 100
+win_player_spr = nil
+win_window = {
+	update = function()
+		if win_window_restart_timer > 0 then
+			win_window_restart_timer -= 1
+		end
+		if win_window_restart_timer <= 0 and btnp(k_action) then
+			run()
+		end
+	end,
+	draw = function()
+		local pad,stats_top_offset,text_content,window_rect = 
+			2,
+			12,
+			get_win_stat_text(),
+			{left=camera_pos.x, top=camera_pos.y, right=camera_pos.x + 127, bottom=camera_pos.y + 127}
+		rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 0)
+		rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 3)
+		spr(ARTIFACT_TILE + 1, window_rect.left + pad + 1, window_rect.top + pad + 1)
+		spr(ARTIFACT_TILE, window_rect.right - TILE_SIZE - pad + 1, window_rect.top + pad, 1, 1)
+		spr(ARTIFACT_TILE, window_rect.left + pad + 1, window_rect.bottom - pad * 5)
+		spr(ARTIFACT_TILE + 1, window_rect.right - TILE_SIZE - pad + 1, window_rect.bottom - pad * 5 + 1, 1, 1)
+		spr(win_player_spr, window_rect.left + SCREEN_SIZE/2 - TILE_HALF_SIZE, window_rect.top + 44)
+		for i=1,count(text_content) do
+			print(text_content[i], window_rect.left + pad, window_rect.top + ((4+2) *(i-1)) + stats_top_offset, 13)
+		end
+		if win_window_restart_timer <= 0 then
+			print("press ❎ to play again", window_rect.left + 21, window_rect.bottom - pad * 4, 3)
+		end
+	end
+}
 
-function start_evil_win_sequence()
+function start_win_sequence()
+	win_player_spr = did_take_the_artifact and 33 or 32
 	has_started_win_sequence = true
-	player.anim = make_animation({33})
-	show_toast_message({"the 'evil' win sequence"})
 	update_fn = win_update
+	window = win_window
 end
 
 function win_update()
-	player.moves = {}
-	if btnp(k_shoot) then
-		run()
+	if window ~= nil then
+		window.update()
 	end
 	foreach(objects,function(obj)
 		if obj ~= player and obj.type.update~=nil then
@@ -2065,6 +2152,24 @@ end
 
 -- utils --
 -----------
+
+function get_total_text_width(text_list)
+	local tmp_w, w = 0,0
+	foreach(text_list, function(msg)
+		tmp_w = text_w_px(msg)
+		if tmp_w > w then
+			w = tmp_w
+		end
+	end)
+
+	return w
+end
+
+function add_each(list_a, list_b)
+	foreach(list_b, function(item)
+		add(list_a, item)
+	end)
+end
 
 function check_player_can_interact()
 	return window == nil and player ~= nil and not player.dead and not has_started_win_sequence
@@ -2173,9 +2278,9 @@ __gfx__
 0000000000000000500050007f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c01000110000828000002820000000000000000000ccc1c0000c1cc00
 0000000050005000550055007ffffff7767777670c0cccc00c00ccc00c000cc00c0000c000111000000080000000200000000000000000000000cc00000cc000
 555055505550555055505550677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000000000000000000000000000000
-003330000035100067777776f000000ff000000f0002200000022000000110000000a0000ccc000011555511022002200000100000cccc000000000000000000
-0053500000338000867ff768f000000ff000000f002112000021120000001100000600000b11cccc001551002b8228820001d1000ccccbc00099990000aaaa00
-0018100000351000786556780f0000f00f0000f00028e200002e82001000011000e6e000bbb1111c00111100bbb88882011ddd100cccccc0099aa9900aa99aa0
+00333000003510006777777650000005500000050002200000022000000110000000a0000ccc000011555511022002200000100000cccc000000000000000000
+0053500000338000867ff7685000000550000005002112000021120000001100000600000b11cccc001551002b8228820001d1000ccccbc00099990000aaaa00
+00181000003510007865567805000050050000500028e200002e82001000011000e6e000bbb1111c00111100bbb88882011ddd100cccccc0099aa9900aa99aa0
 0353530003535300785ff5870044440000444400025115200251152011011b710eeeee000b11b11c001bb1002b88b8821dbdd1d10cc1cbc009a99a900a9aa9a0
 033533000335330087fb3f780454450000544540021b31200213b120011bbbb10ebbbb20c11bbbc000b11b00288bbb821ddbbdd10cc1cc0009a99a900a9aa9a0
 085358000853580078f3bf8700411440044114000213b120021b3120001bb11002222222c111b1c0055115500288b82001ddd1100cccbc00099aa9900aa99aa0
