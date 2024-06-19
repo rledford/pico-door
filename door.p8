@@ -61,8 +61,8 @@ __lua__
 -- [x] add toast messages
 -- [x] add artifact (holy grail)
 -- [x] add stats (doors destroyed, enemies destroyed, ...)
--- [] add win screen and show stats
--- [] show stats on death and win screen
+-- [x] add win screen and show stats
+-- [x] show stats on death and win screen
 
 
 -- other --
@@ -142,8 +142,10 @@ MIRROR_TILE,
 ARTIFACT_TILE,
 SNOIPER_TILE,
 THE_DISTANCE_TILE,
+DESK_TILE,
+BROKEN_DESK_TILE,
 HURT_FLASH_PAL = 
-	0,1,2,0,1,2,4,3,16,6,19,21,37,27,14,57,40,41,42,43,44,45,22,5,35,12,60,39,40,
+	0,1,2,0,1,2,4,3,16,6,19,21,37,27,14,57,40,41,42,43,44,45,22,5,35,12,60,39,40,9,10,
 	{8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8}
 
 -- globals --
@@ -190,7 +192,14 @@ enemies_destroyed,
 chests_looted,
 total_chests,
 total_dmg_dealt,
-total_dmg_taken = 0,0,0,0,0,0,0
+total_dmg_taken = 
+	0, -- doors destroyed
+	0, -- total doors
+	0, --enemies destroyed
+	0, -- chests looted
+	0, -- total chests
+	0, -- total dmg dealt
+	0 -- total dmg taken
 
 
 -- boss --
@@ -200,9 +209,9 @@ has_shown_is_all_powerful_msg = false
 has_started_boss_room = false
 has_spoken_to_moose = false
 did_anger_moose = false
-did_take_the_artifact = true
+did_take_the_artifact = false
 has_started_win_sequence = false
-max_boss_hp = 1 --12000
+max_boss_hp = 12000
 boss_hp = max_boss_hp
 
 update_fn = function()
@@ -217,25 +226,23 @@ function _init()
 	calculate_stat_totals_from_map()
 	start_room_transition(0,0)
 	update_fn = game_update
-	-- show_toast_message({
-	-- 	"⬆️⬇️⬅️➡️ - move",
-	-- 	"      🅾️ - shoot",
-	-- 	"      ❎ - interact",
-	-- 	"",
-	-- 	"   break down the doors   ",
-	-- 	"     loot every chest     ",
-	-- 	" find the goblet of grail ",
-	-- 	"      don't get doid      ",
-	-- }, 750)
-	--goto_boss_room()
-	start_win_sequence()
+	show_toast_message({
+		"⬆️⬇️⬅️➡️ - move",
+		"      🅾️ - shoot",
+		"      ❎ - interact",
+		"",
+		"   break down the doors   ",
+		"     loot every chest     ",
+		" find the goblet of grail ",
+		"      don't get doid      ",
+	}, 750)
 end
 
 function calculate_stat_totals_from_map()
 	for c=0,64,1 do
 		for r=0,48,1 do
 			local t = mget(c,r)
-			if t == 3 then
+			if t == DOOR_TILE then
 				total_doors += 1
 			end
 			if t >= 39 and t <= 45 then
@@ -243,6 +250,8 @@ function calculate_stat_totals_from_map()
 			end
 		end
 	end
+	-- add one for the boss door
+	total_doors += 1
 end
 
 function _update60()
@@ -291,7 +300,7 @@ function _draw()
 	-- end
 	-- print(tostr(difficulty), 0,16,8)
 	if not has_started_win_sequence then
-		-- draw_ui()
+		draw_ui()
 	end
 end
 
@@ -314,10 +323,12 @@ function game_update()
 		is_all_powerful = chests_looted == total_chests
 		if is_all_powerful and not has_shown_is_all_powerful_msg then
 			show_toast_message({
-				"you're all-powerful now...",
+				"you're all-powerful now..."
+			},90)
+			show_toast_message({
 				"get to the goblet of grail.",
 				"!! hurry !! <sqeal>"
-			},700)
+			},90)
 			has_shown_is_all_powerful_msg = true
 		end
 	end
@@ -333,18 +344,19 @@ player_type = {
 		this.hitbox={x=2,y=2,w=3,h=4}
 		this.target=nil
 		this.auto_target_radius = 30
-		this.projectile_damage = 50
+		this.projectile_damage = 2
 		this.projectile_speed = 1.3
 		this.projectile_lifetime = 60
 		this.has_ricochet = false
 		this.has_pierce = false
 		this.has_overload = false
 		this.face = {x=1,y=0}
-		this.max_hp = 1000
+		this.max_hp = 20
 		this.hp = this.max_hp
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
+		this.hurt_duration = 45
 		this.can_move = true
 		-- this.max_gems = 250
 		-- this.gems = 0
@@ -689,7 +701,7 @@ projectile_type = {
 		end
 		if not this.ignore_walls then
 			local t = mget(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE))
-			local is_blocked = t == WALL_TILE or t == BLOCK_TILE or (t == BOSS_TILE and not has_started_boss_room)
+			local is_blocked = t == WALL_TILE or t == BLOCK_TILE or t == DESK_TILE or t == BROKEN_DESK_TILE or (t == BOSS_TILE and not has_started_boss_room)
 			local is_enemy_hitting_door = t == DOOR_TILE and this.group ~= ENEMY_GROUP
 
 			if is_blocked or is_enemy_hitting_door then
@@ -727,6 +739,7 @@ chest_type = {
 	end,
 	take_damage=function(this, amount)
 		this.hp -= amount
+		track_dmg_dealt(amount)
 		start_hurt_object(this)
 		if this.hp <= 0 then
 			--play destroy sound
@@ -762,19 +775,7 @@ moose_type = {
 	end,
 	update=function(this)
 		if did_anger_moose then
-			this.explode_in_anger_timer -= 1
-			if this.explode_in_anger_timer <= 0 then
-				destroy_object(this)
-				for i=0,10 do
-					make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame], 500)
-				end
-				mset(pos_to_tile(this.x),pos_to_tile(this.y), FLOOR_TILE)
-				show_toast_message({
-					"         r.i.p.        ",
-					"       mr. mooshe      "
-				},80)
-				return
-			end
+			return
 		end
 		this.anim.update()
 		this.can_interact = check_player_can_interact() and not this.is_speaking and not did_anger_moose and flr(get_range(this, player)) <= TILE_SIZE
@@ -783,8 +784,21 @@ moose_type = {
 				did_anger_moose = true
 				show_toast_message({
 					"destroy it or don't!",
+					"!! gah !!",
 					"<gets unreasonably angry>",
-				},100)
+				},
+				120,
+				function()
+					destroy_object(this)
+					for i=0,10 do
+						make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame], 500)
+					end
+					mset(pos_to_tile(this.x),pos_to_tile(this.y), FLOOR_TILE)
+					show_toast_message({
+						"         r.i.p.        ",
+						"       mr. mooshe      "
+					},90)
+				end)
 			else
 				this.is_speaking = true
 				show_toast_message({
@@ -797,27 +811,34 @@ moose_type = {
 				})
 				show_toast_message({
 					"the goblet of grail is",
-					"not what it seems <panting>"
+					"not what it seems!",
+					"<panting heavily>"
 				})
 				show_toast_message({
-					"it makes you immortal but...",
+					"it makes you immortal but..."
+				})
+				show_toast_message({
 					"life becomes a never-ending",
-					"grind full of neck problems.",
+					"grind full of neck problems."
 				})
 				show_toast_message({
-					"you get suuuuuper old <gags>",
+					"you get suuuuper old <gags>",
 					"because that's what happens",
 					"when you can't get doid."
 				})
 				show_toast_message({
 					"destroy the grail or...",
-					"<sighs>",
-					"take it knowing it's probably",
-					"a bad idea.",
-				},600,function()
-					has_spoken_to_moose = true
-					this.is_speaking = false
-				end)
+					"<looong sigh>"
+				})
+				show_toast_message({
+						"take it knowing it's",
+						"probably a bad idea."
+					},
+					600,
+					function()
+						has_spoken_to_moose = true
+						this.is_speaking = false
+					end)
 			end
 		end
 	end
@@ -1014,6 +1035,7 @@ door_type = {
 	end,
 	take_damage=function(this, amount)
 		this.hp -= amount
+		track_dmg_dealt(amount)
 		start_hurt_object(this)
 		if this.hp <= 0 then
 			--play destroy sound
@@ -1230,6 +1252,7 @@ artifact_type = {
 		if this.can_interact and btnp(k_action) then
 			if has_spoken_to_moose then
 				player.can_move = false
+				did_take_the_artifact = true
 				destroy_object(this)
 				show_toast_message({
 					"the goblet of grail is yours",
@@ -1295,34 +1318,39 @@ mirror_type = {
 }
 
 function show_player_stats_toast()
-	local msg = {
+	local info = {
 		"     health: "..tostr(flr(player.hp)).."/"..tostr(player.max_hp),
 		"     damage: "..tostr(player.projectile_damage),
 		"  fire dist: "..tostr(flr(30/player.projectile_speed/player.projectile_lifetime*30)*8),
 		"  fire rate: "..tostr(30/player.fire_rate).."/sec",
 		"target dist: "..tostr(player.auto_target_radius),
 		" difficulty: "..tostr(difficulty), -- remove this once final diff confirmed
-		"- - - - - - - - - - -",
-	}	
-	add_each(msg, get_brief_world_stat_text())
-	show_toast_message(msg)
+	}
+	show_toast_message(info)
+	show_toast_message(get_brief_world_stat_text())
 end
 
 function get_brief_world_stat_text()
 	local stat_text = {
-		"      doors: "..tostr(doors_destroyed).."/"..tostr(total_doors),
-		"     chests: "..tostr(chests_looted).."/"..tostr(total_chests),
-		"    enemies: "..tostr(enemies_destroyed)
+		"      doors: "..tostr(doors_destroyed).."/"..tostr(total_doors).."      ",
+		"     chests: "..tostr(chests_looted).."/"..tostr(total_chests).."      ",
+		"    enemies: "..tostr(enemies_destroyed).."      ",
 	}
 
 	return stat_text
 end
 
+function get_dmg_stat_text()
+	return {
+		"  dmg dealt: "..flr(total_dmg_dealt).."  ",
+		"  dmg taken: "..flr(total_dmg_taken).."  ",
+	}
+end
+
 function get_win_stat_text()
 	local stat_text = get_brief_world_stat_text()
+	add_each(stat_text, get_dmg_stat_text())
 	local extra_text = {
-		"  dmg dealt: "..total_dmg_dealt,
-		"  dmg taken: "..total_dmg_taken,
 		"",
 		"",
 		"       ★ achievements ★        ",
@@ -1331,25 +1359,25 @@ function get_win_stat_text()
 	-- add more with add_each(stat_text, rest)
 	if doors_destroyed >= total_doors then
 		add_each(extra_text,{
-			"◆ door reaper",
-			"     - doid, doid, doid..."
+			"◆ fbi, open up!",
+			"   -> destroy all doors"
 		})
 	end
 	if did_anger_moose then
 		add_each(extra_text,{
 			"◆ annoyer of moose",
-			"     - he 'sploded"
+			"   -> he 'sploded"
 		})
 	end
 	if did_take_the_artifact then
 		add_each(extra_text,{
 			"◆ neck problems",
-			"     - take the goblet of grail"
+			"   -> take the goblet of grail"
 		})
 	else
 		add_each(extra_text,{
 			"◆ no thanks",
-			"     - doid the goblet of grail"
+			"   -> doid the goblet of grail"
 		})
 	end
 
@@ -1572,13 +1600,15 @@ function init_object(type,x,y)
 		if obj.type.take_damage ~= nil then
 			obj.type.take_damage(obj, amount)
 			if obj.is_enemy then
-				total_dmg_dealt += amount
 			end
 		else
+			if obj.is_enemy then
+				track_dmg_dealt(amount)
+			end
 			obj.hp -= amount
 			if obj.hp <= 0 then
 				if obj.is_enemy then
-					enemies_destroyed += 1
+					track_enemy_destroyed()
 				end
 				if obj.anim ~= nil then
 					make_particle_group(obj.x,obj.y, obj.anim.frames[obj.anim.current_frame])
@@ -1589,7 +1619,7 @@ function init_object(type,x,y)
 				-- instead check if obj has on_destroy
 				-- which should handle spawning pickups
 				if obj.type ~= player_type then
-					if rnd(1000) > 900 then
+					if rnd(1000) > 750 then
 						make_hp_pickup(obj.x,obj.y,ceil(rnd(difficulty) + 1))
 					-- elseif not has_started_boss_room and rnd(1000) > 100 then
 					-- 	make_gems_pickup(obj.x,obj.y,flr((rnd(5) + 3) * difficulty))
@@ -2083,14 +2113,21 @@ death_window = {
 		end
 	end,
 	draw = function()
-		local window_rect = {left=camera_pos.x + 8, top=camera_pos.y+40, right=camera_pos.x + 119, bottom=camera_pos.y + 91}
-		local pad = 4
+		local stat_text = get_brief_world_stat_text()
+		add_each(stat_text, get_dmg_stat_text())
+		local pad,stats_top_offset,window_rect = 
+			4,
+			17,
+			{left=camera_pos.x + 8, top=camera_pos.y+40, right=camera_pos.x + 119, bottom=camera_pos.y + 100}
 		rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 0)
 		rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 8)
 		spr(11, window_rect.left + 27, window_rect.top + pad - 2)
 		print("you doid", window_rect.left + 40, window_rect.top + pad)
+		for i=1,count(stat_text) do
+			print(stat_text[i], window_rect.left + pad + 1, window_rect.top + ((4+2) *(i-1)) + stats_top_offset, 7)
+		end
 		spr(11, window_rect.left + 76, window_rect.top + pad - 2, 1, 1, true)
-		print("press x to restart", window_rect.left + 21, window_rect.bottom - pad * 2, 7)
+		print("press ❎ to play again", window_rect.left + 13, window_rect.bottom - pad * 1.5, 7)
 	end
 }
 
@@ -2177,6 +2214,13 @@ end
 
 function increase_difficulty(amount)
 	difficulty += amount
+end
+
+function track_dmg_dealt(amount)
+	total_dmg_dealt += amount
+end
+function track_enemy_destroyed()
+	enemies_destroyed += 1
 end
 
 function get_enemy_hp_for_difficulty(base_hp)
@@ -2270,14 +2314,14 @@ __gfx__
 0070070055000055776776774c4cc4c4776776775a5aa5a575566557080000808008800844444444454454440587785045c77c540000000049a99a9444444444
 000000005050050576777767cc4444cc76777767a9a55a9a7655556700888800800000084444444444544544058585804457c5448000000849a99a9444944944
 00000000555005556777777644c44c4467777776aa5555aa67766776000000000888888094999499959995990855858099455499880000884444444404444440
-000000000000000005000500677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000000000000000000000000000000
-0000000005000500055005507ffffff7767777670c0cccc00c00ccc00c000cc00c0000c0000111000000000000000000000000000000000000cc0000000cc000
-0555055505550555055505557f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c011000100008080000020200000000000000000000c1ccc000cc1c00
-000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c100000010082828000282820000000000000000000c111c00c111cc0
-000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c10000001008222800028882000000000000000000c111c000cc111c0
-0000000000000000500050007f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c01000110000828000002820000000000000000000ccc1c0000c1cc00
-0000000050005000550055007ffffff7767777670c0cccc00c00ccc00c000cc00c0000c000111000000080000000200000000000000000000000cc00000cc000
-555055505550555055505550677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000000000000000000000000000000
+000000000000000005000500677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000088000000000000000000000000
+0000000005000500055005507ffffff7767777670c0cccc00c00ccc00c000cc00c0000c0000111000000000000000000000008080088880000cc0000000cc000
+0555055505550555055505557f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c011000100008080000020200088888088888880000c1ccc000cc1c00
+000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c100000010082828000282820080088088800888800c111c00c111cc0
+000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c10000001008222800028882000088888008888880c111c000cc111c0
+0000000000000000500050007f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c01000110000828000002820000088888008808880ccc1c0000c1cc00
+0000000050005000550055007ffffff7767777670c0cccc00c00ccc00c000cc00c0000c000111000000080000000200000880000008000080000cc00000cc000
+555055505550555055505550677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000000008888880000000000000000
 00333000003510006777777650000005500000050002200000022000000110000000a0000ccc000011555511022002200000100000cccc000000000000000000
 0053500000338000867ff7685000000550000005002112000021120000001100000600000b11cccc001551002b8228820001d1000ccccbc00099990000aaaa00
 00181000003510007865567805000050050000500028e200002e82001000011000e6e000bbb1111c00111100bbb88882011ddd100cccccc0099aa9900aa99aa0
@@ -2521,7 +2565,7 @@ __label__
 55555555555555555555555555555555555555555555555555555555666666666666666655555555555555555555555555555555555555555555555555555555
 
 __gff__
-0101000381810000000101000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101000381810000000101000100010000000000000000000000000000000000000000000000000000000000000000000000000000000000000101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __map__
 0101010101010101010101010101010100000000000000000000000101010101000101010101010000000000000000000000000000000000000000000000000000010101010101010101010101010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -2551,7 +2595,7 @@ __map__
 0101020100000001010101010000000001020100010202020210022701000000000101010101010101010101010000000000000000010202060206020201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 010202010101010102290201010000000110010001020201010101010100000000012b020201280202020206010101010101010101010202020202020201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102130202020210020602100100000001030100010202010000000000000000000102220201020202020202011002020202020210390202020202021001000000000000010139020202390101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-010102020101010201010102010101010110010001020201010101010101010101010c191001020202020213031010020202021010031302020202100201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010102020101010201010102010101010110010001020201010101010101010101010c0a1001020202020213031010020202021010031302020202100201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0101020201000102010001020202100101020100010202020202020202020302023902100210060202020202391002020202020210010202020210022b01000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0102020201000102010101020210020202100100010202020206290602023902020313020202020202020202010101010101010101010101390201010101000000000000010139020202390101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 01022b0201000102020202020202100101010100010339020202020202020101010102020202020202020202010000000000000000000000010301000000000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
