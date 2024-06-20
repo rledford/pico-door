@@ -277,12 +277,11 @@ function _draw()
 	if player.target ~= nil then
 		spr(13, player.target.x, player.target.y)
 	end
-	draw_particles()
-	if window ~= nil then
-		window.draw(window)
-	end
 	if toast_msg_window != nil then
 		toast_msg_window.draw(toast_msg_window)
+	end
+	if window ~= nil then
+		window.draw(window)
 	end
 	-- if debug then
 	-- 	print("mem kb: "..stat(0),  camera_pos.x + 1, camera_pos.y + 1 + 8, 8)
@@ -302,6 +301,7 @@ function _draw()
 	if not has_started_win_sequence then
 		draw_ui()
 	end
+	draw_particles()
 end
 
 -- game update --
@@ -2136,6 +2136,7 @@ death_window = {
 
 win_window_restart_timer = 100
 win_player_spr = nil
+win_fireworks_timer = 0
 win_window = {
 	update = function()
 		if win_window_restart_timer > 0 then
@@ -2143,6 +2144,14 @@ win_window = {
 		end
 		if win_window_restart_timer <= 0 and btnp(k_action) then
 			run()
+		end
+		if win_fireworks_timer <= 0 then
+			win_fireworks_timer = 600
+			for i=1,10 do
+				make_particle_group(camera_pos.x + rnd(SCREEN_SIZE), camera_pos.y + rnd(SCREEN_SIZE-8) + 8, flr(rnd(64))+1, win_fireworks_timer)
+			end
+		else
+			win_fireworks_timer -= 1
 		end
 	end,
 	draw = function()
