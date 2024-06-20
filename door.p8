@@ -225,7 +225,7 @@ function _init()
 	player = init_object(player_type, 16, 40)
 	calculate_stat_totals_from_map()
 	start_room_transition(0,0)
-	update_fn = game_update
+	show_select_difficulty_window()
 	show_toast_message({
 		"⬆️⬇️⬅️➡️ - move",
 		"      🅾️ - shoot",
@@ -1324,7 +1324,6 @@ function show_player_stats_toast()
 		"  fire dist: "..tostr(flr(30/player.projectile_speed/player.projectile_lifetime*30)*8),
 		"  fire rate: "..tostr(30/player.fire_rate).."/sec",
 		"target dist: "..tostr(player.auto_target_radius),
-		" difficulty: "..tostr(difficulty), -- remove this once final diff confirmed
 	}
 	show_toast_message(info)
 	show_toast_message(get_brief_world_stat_text())
@@ -1351,6 +1350,7 @@ function get_win_stat_text()
 	local stat_text = get_brief_world_stat_text()
 	add_each(stat_text, get_dmg_stat_text())
 	local extra_text = {
+		" difficulty: "..tostr(selected_difficulty == 1 and "easy" or "normal"),
 		"",
 		"",
 		"       ★ achievements ★        ",
@@ -2085,6 +2085,50 @@ function goto_boss_room()
 	end_room_transition()
 end
 
+-- difficulty --
+----------------
+
+difficulty_choices ={
+	"easy",
+	"normal",
+}
+selected_difficulty = 2
+difficulty_window = {
+	update=function()
+		if btnp(k_up) then
+			selected_difficulty = clamp(selected_difficulty - 1, 1, 2)
+		elseif btnp(k_down) then
+			selected_difficulty = clamp(selected_difficulty + 1, 1, 2)
+		elseif btnp(k_action) then
+			if selected_difficulty == 1 then
+				enemy_hp_scale = 0.35
+				enemy_dmg_scale = 0.25
+			end
+			window = nil
+			update_fn = game_update
+		end
+	end,
+	draw=function()
+		rectfill(29,48,106,88,5)
+		rect(28,48,106,88,0)
+		print("choose difficulty",34,50,7)
+		for i=1,count(difficulty_choices) do
+			local is_selected = selected_difficulty == i
+			print(
+				(is_selected and "* " or "  ")..difficulty_choices[i],
+				52,
+				62 + ((i-1) * 7),
+				is_selected and 12 or 7
+			)
+		end
+		print("press ❎ to confirm", 30,82, 7)
+	end
+}
+function show_select_difficulty_window()
+	window = difficulty_window
+	update_fn = difficulty_window.update
+end
+
 -- death --
 -----------
 
@@ -2134,7 +2178,7 @@ death_window = {
 -- win --
 ---------
 
-win_window_restart_timer = 100
+win_window_restart_timer = 500
 win_player_spr = nil
 win_fireworks_timer = 0
 win_window = {
@@ -2166,7 +2210,7 @@ win_window = {
 		spr(ARTIFACT_TILE, window_rect.right - TILE_SIZE - pad + 1, window_rect.top + pad, 1, 1)
 		spr(ARTIFACT_TILE, window_rect.left + pad + 1, window_rect.bottom - pad * 5)
 		spr(ARTIFACT_TILE + 1, window_rect.right - TILE_SIZE - pad + 1, window_rect.bottom - pad * 5 + 1, 1, 1)
-		spr(win_player_spr, window_rect.left + SCREEN_SIZE/2 - TILE_HALF_SIZE, window_rect.top + 44)
+		spr(win_player_spr, window_rect.left + SCREEN_SIZE/2 - TILE_HALF_SIZE, window_rect.top + 49)
 		for i=1,count(text_content) do
 			print(text_content[i], window_rect.left + pad, window_rect.top + ((4+2) *(i-1)) + stats_top_offset, 13)
 		end
