@@ -690,6 +690,9 @@ projectile_type = {
 					elseif not this.can_move_through(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(this.y + TILE_HALF_SIZE)) then
 						-- hit left or right of wall so reverse x
 						this.direction.x *= -1
+					else 
+						this.direction.x *= -1
+						this.direction.y *= -1
 					end
 					-- skip setting position to nextx,nexty to prevent drilling through corners
 					return
@@ -1608,9 +1611,7 @@ function init_object(type,x,y)
 				-- which should handle spawning pickups
 				if obj.type ~= player_type then
 					if rnd(1000) > 750 then
-						make_hp_pickup(obj.x,obj.y,ceil(rnd(difficulty) + 1))
-					-- elseif not has_started_boss_room and rnd(1000) > 100 then
-					-- 	make_gems_pickup(obj.x,obj.y,flr((rnd(5) + 3) * difficulty))
+						make_hp_pickup(obj.x,obj.y,ceil(player.max_hp * 0.12))
 					end
 					sfx(9,2)
 				end
