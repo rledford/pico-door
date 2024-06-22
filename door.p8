@@ -70,10 +70,10 @@ __lua__
 -- [x] tune enemy movement and damage
 -- [x] add some music
 -- [x] refine sfx
--- [] add different music for boss fight
--- [] stop music during death sequence
--- [] fix projectiles get stuck on corners
--- [] fix toast message queue flooding when dismissing next to interactive object
+-- [x] add different music for boss fight
+-- [x] stop music during death sequence
+-- [x] fix projectiles get stuck on corners
+-- [x] fix toast message queue flooding when dismissing next to interactive object
 
 -- constants --
 ---------------
