@@ -39,6 +39,8 @@ __lua__
 -- [x] gems not picked up explode if player dies
 -- [x] immediately create random enemies on spawn points when player enters room
 -- [x] add npc vendor
+-- [x] add window
+-- [x] make window interactive
 -- [x] interacting close to vendor shows upgrade purchase window
 -- [x] add sfx when vendor window opens and closes
 -- [x] add sfx for vendor purchase success and fail
@@ -54,54 +56,24 @@ __lua__
 -- [x] add chests with pickups
 -- [x] add torch object with animation
 -- [x] reduce tokens and make things look terrible
--- [] add toast message when upgrade acquired in world (not vendor)
--- [] add boss-door room in separate map area
--- [] add boss-door health to UI
--- [] add boss-door destroyed effects
--- [] spawn moose behind boss-door when destroyed
--- [] add stats (doors destroyed, enemies destroyed, ...)
--- [] add win screen and show stats
--- [] show stats on death and win screen
-
-
--- other --
------------
-
--- when difficulty reach X then a message appears that the door is angry
--- and a red portal spawns to to port the player back to the main room (boss-door room).
--- the boss is the door with torches on either side that shoot random shtuff.
--- at interval or at specific door hp breakpoints, forcefields (special wall tiles)
--- spawn that, if the player purchased pierce will damage and pass through forcefield
--- also, there should be targetable hitboxes for the door so that the player can
--- shoot projectiles at an angle which will make "ricochet" useful if player purchased
-
--- boss room (looks same as main room) is in different map region and has all passages
--- blocked so player can not leave (and despawn everything)
--- merchant is dead (skeleton) but can speak (says "what'd you do?!?")
-
--- change floor and wall tiles (switch) and invert colors
--- moose is behind door and does a pee-wee herman scream
-
--- [x] add window
--- [x] make window interactive
--- [] tune enemy movement and damage
--- [] make enemy spawn points configurable or pull from different type pools based on conditions
-
--- ideas --
------------
-
--- vendors and/or traveling vendors to sell pickukps
--- add a skeleton behind a desk who says "hello"
--- projectiles bounce off walls
--- using particle system instead of sprites
---   to rotate "blades around the saw"
---   different blades have different colors
--- different saw blades
--- puzzle: player has to bounce blade around a wall
---   the wall is solid except for one section that
---   is a forcefield tile that only a certain saw blad
---   can go through. the blade must be shot to bounce
---   destroy the forcefield controls
+-- [x] add boss-door room in separate map area
+-- [x] add boss-door health to UI
+-- [x] add boss-door destroyed effects
+-- [x] spawn moose behind boss-door when destroyed
+-- [x] add toast messages
+-- [x] add artifact (holy grail)
+-- [x] add stats (doors destroyed, enemies destroyed, ...)
+-- [x] add win screen and show stats
+-- [x] show stats on death and win screen
+-- [x] add "achievements"
+-- [x] make enemy spawn points configurable or pull from different type pools based on conditions
+-- [x] tune enemy movement and damage
+-- [x] add some music
+-- [x] refine sfx
+-- [] add different music for boss fight
+-- [] stop music during death sequence
+-- [] fix projectiles get stuck on corners
+-- [] fix toast message queue flooding when dismissing next to interactive object
 
 -- constants --
 ---------------
@@ -118,13 +90,13 @@ ENEMY_GROUP,
 BLOCK_TILE,
 WALL_TILE,
 FLOOR_TILE,
+NO_PASS_FLOOR_TILE,
 DOOR_TILE,
 SPIKE_TILE,
 ENEMY_SPAWN_TILE,
 TRAP_TILE,
 PORTAL_TILE,
 VENDOR_TILE,
-GEM_TILE,
 HP_TILE,
 CHEST_TILE,
 TORCH_TILE,
@@ -135,20 +107,41 @@ UPGRADE_HP_TILE,
 FAST_SHOT_TILE,
 PIERCE_TILE,
 OVERLOAD_TILE,
-HURT_FLASH_PAL = 0,1,2,0,1,2,3,4,6,19,21,37,28,27,14,57,40,41,42,43,44,45,22,{8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8}
+BOSS_TILE,
+MOOSE_TILE,
+MIRROR_TILE,
+ARTIFACT_TILE,
+SNOIPER_TILE,
+THE_DISTANCE_TILE,
+DESK_TILE,
+BROKEN_DESK_TILE,
+HURT_FLASH_PAL = 
+	0,1,2,0,1,2,4,3,16,6,19,21,37,27,14,57,40,41,42,43,44,45,22,5,35,12,60,39,40,9,10,
+	{8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8}
 
 -- globals --
 -------------
 
 room,
-overload_portal,
-last_portal_used,
+-- overload_portal,
+-- last_portal_used,
 camera_pos,
 camera_spd,
 objects,
 transition_objects,
-types,
-difficulty = {x=0,y=0},nil,{room={x=0,y=0},pos={0,0}},{x=0,y=0},4,{},{},{},1.0
+difficulty,
+enemy_hp_scale,
+enemy_dmg_scale =
+	{x=0,y=0}, -- room
+	-- nil, -- overload portal
+	-- {room={x=0,y=0},pos={0,0}}, -- last portal used
+	{x=0,y=0},
+	4, -- camera speed
+	{}, -- objects
+	{}, -- transition objects
+	1.0, -- difficulty
+	0.75, -- enemy hp scale
+	0.5 -- enemy dmg scale
 
 k_left,
 k_right,
@@ -159,7 +152,46 @@ k_action,
 is_room_transition,
 debug,
 window,
-vendor = 0,1,2,3,4,5,false,false,nil,nil
+toast_msg_window,
+toast_msg_queue,
+vendor = 0,1,2,3,4,5,false,false,nil,nil,{}
+
+-- stats --
+doors_destroyed,
+total_doors,
+enemies_destroyed,
+chests_looted,
+total_chests,
+total_dmg_dealt,
+total_dmg_taken = 
+	0, -- doors destroyed
+	0, -- total doors
+	0, --enemies destroyed
+	0, -- chests looted
+	0, -- total chests
+	0, -- total dmg dealt
+	0 -- total dmg taken
+
+
+-- boss --
+----------
+is_all_powerful,
+has_shown_is_all_powerful_msg,
+has_started_boss_room,
+has_spoken_to_moose,
+did_anger_moose,
+did_take_the_artifact,
+has_started_win_sequence,
+max_boss_hp =
+	false, -- is all powerful
+	false, -- has show all powerful msg
+	false, -- has started boss room
+	false, -- has spoken to moose
+	false, -- did anger moose
+	false, -- did take artifact
+	false, -- has started win sequence
+	12000 -- max boss hp
+boss_hp = max_boss_hp
 
 update_fn = function()
 end
@@ -170,9 +202,35 @@ end
 function _init()
 	cls()
 	player = init_object(player_type, 16, 40)
+	calculate_stat_totals_from_map()
 	start_room_transition(0,0)
-	init_object(moose_type, 64,64)
-	update_fn = game_update
+	show_select_difficulty_window()
+	show_toast_message({
+		"⬆️⬇️⬅️➡️ - move",
+		"      🅾️ - shoot",
+		"      ❎ - interact",
+		"",
+		"   break down the doors   ",
+		"     loot every chest     ",
+		" find the goblet of grail ",
+		"      don't get doid      ",
+	}, 750)
+end
+
+function calculate_stat_totals_from_map()
+	for c=0,64,1 do
+		for r=0,48,1 do
+			local t = mget(c,r)
+			if t == DOOR_TILE then
+				total_doors += 1
+			end
+			if t >= 39 and t <= 45 then
+				total_chests += 1
+			end
+		end
+	end
+	-- add one for the boss door
+	total_doors += 1
 end
 
 function _update60()
@@ -198,26 +256,16 @@ function _draw()
 	if player.target ~= nil then
 		spr(13, player.target.x, player.target.y)
 	end
-	draw_particles()
+	if toast_msg_window != nil then
+		toast_msg_window.draw(toast_msg_window)
+	end
 	if window ~= nil then
 		window.draw(window)
 	end
-	-- if debug then
-	-- 	print("mem kb: "..stat(0),  camera_pos.x + 1, camera_pos.y + 1 + 8, 8)
-	-- 	print("player x: "..player.x, camera_pos.x + 1, camera_pos.y + 1 + 16, 8)
-	-- 	print("player y: "..player.y, camera_pos.x + 1, camera_pos.y + 1 + 24, 8)
-	-- 	print("objects: "..count(objects), camera_pos.x + 1, camera_pos.y + 1 + 32, 8)
-	-- 	print("transition objects: "..count(transition_objects), camera_pos.x + 1, camera_pos.y + 1 + 48, 8)
-	-- 	if player.target ~= nil then
-	-- 		local range = get_range(player, player.target)
-	-- 		print("target rng: "..flr(range), camera_pos.x + 1, camera_pos.y + 1 + 40, 8)
-	-- 		circ(player.x + 4, player.y + 4, range)
-	-- 	else
-	-- 		circ(player.x + 4, player.y + 4, player.auto_target_radius, 8)
-	-- 	end
-	-- end
-	-- print(tostring(difficulty), 0,16,8)
-	draw_ui()
+	if not has_started_win_sequence then
+		draw_ui()
+	end
+	draw_particles()
 end
 
 -- game update --
@@ -234,6 +282,20 @@ function game_update()
 		obj.move()
 	end)
 	update_particles()
+	update_toasts()
+	if not is_all_powerful then
+		is_all_powerful = chests_looted == total_chests
+		if is_all_powerful and not has_shown_is_all_powerful_msg then
+			show_toast_message({
+				"you're all-powerful now..."
+			},90)
+			show_toast_message({
+				"get to the goblet of grail.",
+				"!! hurry !! <sqeal>"
+			},90)
+			has_shown_is_all_powerful_msg = true
+		end
+	end
 end
 
 -- player --
@@ -245,23 +307,27 @@ player_type = {
 		this.fire_timer = 0
 		this.hitbox={x=2,y=2,w=3,h=4}
 		this.target=nil
-		this.auto_target_radius = 40
-		this.projectil_damage = 50
+		this.auto_target_radius = 30
+		this.projectile_damage = 2
 		this.projectile_speed = 1.3
+		this.projectile_lifetime = 60
 		this.has_ricochet = false
 		this.has_pierce = false
 		this.has_overload = false
 		this.face = {x=1,y=0}
-		this.max_hp = 10
+		this.max_hp = 20
 		this.hp = this.max_hp
 		this.group = PLAYER_GROUP
 		this.anim = make_animation({32})
 		this.hurt_collidable = false
-		this.max_gems = 1
-		this.gems = 0
+		this.hurt_duration = 45
+		this.can_move = true
+		-- this.max_gems = 250
+		-- this.gems = 0
 		this.dead = false
 	end,
 	take_damage=function(this, amt)
+		total_dmg_taken += amt
 		if this.dead then
 			return
 		end
@@ -297,7 +363,7 @@ player_type = {
 			local from = count(this.moves) and this.moves[#this.moves] or {x=this.x,y=this.y}
 			this.face.x,this.face.y = dx,dy
 			local mx,my = dx * TILE_SIZE + from.x, dy * TILE_SIZE + from.y
-			if this.can_move_to(pos_to_tile(mx), pos_to_tile(my)) then
+			if this.can_move and this.can_move_to(pos_to_tile(mx), pos_to_tile(my)) then
 				add(this.moves, {x=mx,y=my})
 				if is_move_to_next_room(mx,my) then
 					start_room_transition(room.x + dx, room.y + dy)
@@ -320,16 +386,27 @@ player_type = {
 			if dir.x == 0 and dir.y == 0 then
 				dir.y = 1
 			end
-			local proj = make_projectile(this.x, this.y, make_animation({30,31}, 4), this.projectil_damage, this.projectile_speed, dir)
+			local proj = make_projectile(
+				this.x,
+				this.y,
+				make_animation({30,31}, 4),
+				this.projectile_damage,
+				this.projectile_speed,
+				dir
+			)
 			proj.ricochet = this.has_ricochet
 			proj.pierce = this.has_pierce
+			proj.lifetime = this.projectile_lifetime
 			add(proj.collision_groups, ENEMY_GROUP)
 		end
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
 		foreach(objects, function(obj)
 			if this.collides_with(obj) then
 				if obj.touch_damage > 0 then
-					this.type.take_damage(this, obj.touch_damage)
+					this.type.take_damage(
+						this,
+						get_enemy_dmg_for_difficulty(obj.touch_damage)
+					)
 				elseif obj.on_pickup ~= nil then
 					obj.on_pickup(this)
 				elseif obj.type.on_activate ~= nil then
@@ -345,180 +422,139 @@ player_type = {
 
 vendor_type = {
 	init=function(this)
-		this.inventory = {
-			upgrade_max_gems,
-			upgrade_max_hp,
-			upgrade_projectile_damage,
-			upgrade_fast_shot,
-		}
-		this.anim = make_animation({37,38}, 20)
+		this.inventory,
+		this.anim,
+		this.can_interact = {
+			upgrade_hp,
+			upgrade_damage,
+			upgrade_fire_rate,
+		},
+		make_animation({37,38}, 20),
+		false
 	end,
 	update=function(this)
-		if window == nil and player ~= nil and not player.dead and btnp(k_action) and flr(get_range(this, player)) <= TILE_SIZE*2 then
-			show_vendor_window(this)
+		this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE*2
+		if this.can_interact and btnp(k_action) then
+			show_toast_message({
+				"i am the all-powerful lunkik.",
+				"",
+				"i used to be a vendor but i",
+				"required too many tokens..."
+			})
 		end
 		this.anim.update()
 	end,
 }
 
-upgrade_max_gems = {
-	spr = SATCHEL_TILE,
-	name = "satchel",
-	description = "+50 to max gems.",
-	cost = 50,
-	persist = true,
-	on_upgrade = function()
-		player.max_gems += 50
-		difficulty *= 1.05
-	end
-}
-
-upgrade_max_hp = {
+upgrade_hp = {
 	spr = UPGRADE_HP_TILE,
-	name = "hp",
-	description = "+1 to max hp.",
-	cost = 100,
-	persist = true,
+	name = "let me live",
+	description = "increase hp and healz",
 	on_upgrade = function()
-		player.max_hp += 1
+		player.max_hp += 3.75
 		player.hp = player.max_hp
-		difficulty *= 1.05
+		increase_difficulty(0.15)
 	end
 }
 
-upgrade_fast_shot = {
-	spr = FAST_SHOT_TILE,
-	name = "fast-shot",
-	description = "increase rate of fire.",
-	cost = 500,
-	persist = true,
+upgrade_damage = {
+	spr = UPGRADE_DMG_TILE,
+	name = "tis more than a scratch",
+	description = "increase damage",
 	on_upgrade = function()
-		player.fire_rate = clamp(player.fire_rate - 1, 8, 20)
+		player.projectile_damage += 2
+		increase_difficulty(0.15)
+	end
+}
+
+upgrade_fire_rate = {
+	spr = FAST_SHOT_TILE,
+	name = "it's high noon",
+	description = "increase fire rate",
+	on_upgrade = function()
+		player.fire_rate = clamp(player.fire_rate - 1.5, 8, 20)
 		player.fire_timer = 0
-		difficulty *= 1.1
-		if player.fire_rate <= 8 then
-			upgrade_fast_shot.persist = false
-		end
+		increase_difficulty(0.15)
 	end
 }
 
 upgrade_projectile_ricochet = {
 	spr = RICOCHET_TILE,
-	name = "ricochet",
-	description = "projectiles bounce.",
-	cost = 500,
-	persist = false,
+	name = "(bounce) pogo pogo...",
+	description = "shots bounce",
 	on_upgrade = function()
 		player.has_ricochet = true
-		difficulty *= 1.1
-	end
-}
-
-upgrade_projectile_damage = {
-	spr = UPGRADE_DMG_TILE,
-	name = "damage",
-	description = "+1 to projectile damage.",
-	cost = 300,
-	persist = true,
-	on_upgrade = function()
-		player.projectil_damage += 1
-		difficulty *= 1.1
+		increase_difficulty(0.3)
 	end
 }
 
 upgrade_projectile_pierce = {
 	spr = PIERCE_TILE,
-	name = "pierce",
-	description = "projectiles pierce.",
-	cost = 1000,
-	persist = false,
+	name = "nice earings",
+	description = "shots pierce enemies",
 	on_upgrade = function()
 		player.has_pierce = true
-		difficulty *= 1.1
+		increase_difficulty(0.3)
 	end
 }
 
-upgrade_overload = {
-	spr = OVERLOAD_TILE,
-	name = "overload",
-	description = "spawn portal on full gems.",
-	cost = 750,
-	persist = false,
+upgrade_target_radius = {
+	spr = SNOIPER_TILE,
+	name = "snoiper",
+	description = "increase target range",
 	on_upgrade = function()
-		player.has_overload = true
+		player.auto_target_radius += 8
+		increase_difficulty(0.5)
 	end
 }
 
-function show_vendor_window(vendor_obj)
-	sfx(8)
-	local win = {
-		selected_upgrade = 1,
-		update = function(this)
-			if btnp(k_action) then
-				window = nil
-				update_fn = game_update
-				sfx(9)
-				return
-			elseif btnp(k_shoot) then
-				local upgrade = vendor_obj.inventory[this.selected_upgrade]
-				if player.gems - upgrade.cost < 0 then
-					sfx(10)
-					return
+upgrade_projectile_lifetime = {
+	spr = THE_DISTANCE_TILE,
+	name = "cake",
+	description = "increase the distance of shots",
+	on_upgrade = function()
+		player.projectile_lifetime += 15
+		increase_difficulty(0.25)
+	end
+}
+
+-- toast message --
+-------------------
+function show_toast_message(text_list,lifetime,callback)
+	local line_count = count(text_list)
+	local w,h,pad,lifetime = 
+	get_total_text_width(text_list), -- w
+	count(text_list) * 4, -- h
+	2, -- pad
+	lifetime or 600 -- lifetime
+	w += pad * 2
+	h += pad * 2 + line_count * 2
+	local toast = {
+		update=function(this)
+			lifetime -= 1
+			if lifetime <= 0 or btnp(k_action) then
+				toast_msg_window = nil
+				if callback ~= nil then
+					callback()
 				end
-				if not upgrade.persist then
-					del(vendor_obj.inventory, upgrade)
-					this.selected_upgrade = clamp(this.selected_upgrade, 1, count(vendor_obj.inventory))
-				end
-				sfx(11)
-				player.gems -= upgrade.cost
-				upgrade.on_upgrade()
-			elseif btnp(k_left) then
-				this.selected_upgrade = clamp(this.selected_upgrade-1, 1, count(vendor_obj.inventory))
-			elseif btnp(k_right) then
-				this.selected_upgrade = clamp(this.selected_upgrade+1, 1, count(vendor_obj.inventory))
 			end
 		end,
-		draw = function(this)
-			local window_rect,
-			pad,
-			gems_text,
-			hp_text = {left=camera_pos.x + 8, top=camera_pos.y+40,
-			right=camera_pos.x + 119, bottom=camera_pos.y + 91},
-			4,
-			tostring(player.gems).."/"..tostring(player.max_gems),
-			tostring(player.hp).."/"..tostring(player.max_hp)
+		draw=function(this)
+			local left,top =
+				camera_pos.x + SCREEN_SIZE/2 - w/2,
+				camera_pos.y + SCREEN_SIZE - h + 1
+			local right,bottom =
+				left + w - 1,
+				top + h - 2
 
-			rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 13)
-			rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 2)
-			print("lunkik", window_rect.left + pad, window_rect.top + pad/2, 2)
-			spr(HP_TILE, window_rect.right - text_w_px(hp_text) - TILE_SIZE - 2, window_rect.top)
-			print(hp_text, window_rect.right - text_w_px(hp_text) - pad/2, window_rect.top + pad/2, 2)
-			spr(GEM_TILE, window_rect.right - text_w_px(gems_text) - TILE_SIZE - 1, window_rect.top + 6)
-			print(gems_text, window_rect.right - text_w_px(gems_text) - pad/2, window_rect.top + pad/2 + 6, 11)
-			local itemx
-			for i=0,count(vendor_obj.inventory)-1 do
-				itemx = window_rect.left + 32 + TILE_SIZE * i + pad + (pad * i)
-				itemy = window_rect.top + pad*2 + TILE_SIZE
-				rectfill(itemx-1, itemy-1, itemx + TILE_SIZE, itemy + TILE_SIZE, 0)
-				spr(vendor_obj.inventory[i+1].spr, itemx, itemy)
-				if i+1 == this.selected_upgrade then
-					rect(itemx-2, itemy-2, itemx + TILE_SIZE + 1, itemy + TILE_SIZE + 1, 2)
-				end
+			rectfill(left,top,right,bottom,13)
+			rect(left,top,right,bottom,2)
+			for i=1,line_count do
+				print(text_list[i],left + pad,(4+2) *(i-1) + top + pad,7)
 			end
-
-			local details_left,details_top,details_line_h = window_rect.left + pad,window_rect.top + 29,8
-
-			print(vendor_obj.inventory[this.selected_upgrade].name, details_left, details_top, 7)
-			print(vendor_obj.inventory[this.selected_upgrade].description, details_left, details_top + details_line_h)
-			spr(GEM_TILE, details_left - 2, details_top + details_line_h * 2 - 2)
-			print(vendor_obj.inventory[this.selected_upgrade].cost, details_left + 5,  details_top  + details_line_h * 2, 11)
 		end
 	}
-	window = win
-	update_fn = function()
-		vendor_obj.type.update(vendor_obj)
-		window.update(window)
-	end
+	add(toast_msg_queue, toast)
 end
 
 -- pickups --
@@ -537,7 +573,7 @@ pickup_type = {
 			this.expiration_timer -= 1
 			this.anim.frame_time = this.expiration_timer/this.expiration_time <= 0.25 and 4 or this.anim.frame_time
 		end
-		if player.dead or this.expiration_timer <= 0 then
+		if this.expiration_timer <= 0 then
 			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame], 100)
 			destroy_object(this)
 			return
@@ -551,50 +587,42 @@ pickup_type = {
 	end
 }
 
-function make_pickup(x, y, anim, pickup_range)
+function make_pickup(x, y, anim, pickup_range, can_expire)
 	local pickup = init_object(pickup_type, x, y)
 	pickup.pickup_range,
-	pickup.anim = pickup_range or 0,anim
-	return pickup
-end
-
-function make_gems_pickup(x, y, amount)
-	local pickup = make_pickup(x, y, make_animation({28,29}, 10), 18)
+	pickup.anim,
 	pickup.hitbox,
-	pickup.on_pickup={x=2,y=2,w=3,h=3},
-	function(player)
-		player.gems = clamp(player.gems + amount, 0, player.max_gems)
-		destroy_object(pickup)
-		if player.gems == player.max_gems and player.has_overload and overload_portal == nil then
-			local pos = get_open_pos_next_to(flr(player.x / TILE_SIZE) * TILE_SIZE, flr(player.y / TILE_SIZE) * TILE_SIZE)
-			overload_portal = init_object(portal_type, pos.x, pos.y)
-		end
-	end
+	pickup.can_expire =
+		pickup_range,
+		anim,
+		{x=2,y=2,w=3,h=3},
+		can_expire
+		
 	return pickup
 end
 
 function make_hp_pickup(x, y, amount)
-	local pickup = make_pickup(x, y, make_animation({26,27}, 16), 10)
-	pickup.hitbox,
-	pickup.on_pickup = {x=2,y=2,w=3,h=3},
-	function(player)
-		player.hp = clamp(player.hp + amount, player.hp, player.max_hp)
-		destroy_object(pickup)
-	end
+	local pickup = make_pickup(x, y, make_animation({26,27}, 16), 16,true)
+		pickup.on_pickup =	function(player)
+				player.hp = clamp(player.hp + amount, player.hp, player.max_hp)
+				destroy_object(pickup)
+			end
+
 	return pickup
 end
 
 function make_upgrade_pickup(x, y, type)
-	local pickup = make_pickup(x, y, make_animation({type.spr}), 0)
-	pickup.spr,
-	pickup.can_expire,
-	pickup.hitbox,
-	pickup.on_pickup = type.spr,false,{x=2,y=2,w=3,h=3},
-	function()
-		type.on_upgrade()
-		sfx(11)
-		destroy_object(pickup)
-	end
+	local pickup = make_pickup(x, y, make_animation({type.spr}), 0, false)
+		pickup.spr = type.spr
+		pickup.on_pickup = function()
+			type.on_upgrade()
+			chests_looted += 1
+			sfx(11)
+			show_toast_message({type.name},100)
+			show_toast_message({type.description},100)
+			destroy_object(pickup)
+		end
+
 	return pickup
 end
 
@@ -613,7 +641,8 @@ projectile_type = {
 		this.damage,
 		this.ricochet,
 		this.pierce,
-		this.hit_list = false,nil,{x=3,y=3,w=2,h=2},0,{x=0, y=0},120,{},1,false,false,{}
+		this.ignore_walls,
+		this.hit_list = false,nil,{x=3,y=3,w=2,h=2},0,{x=0, y=0},120,{},1,false,false,false,{}
 	end,
 	update=function(this)
 		this.lifetime -= 1
@@ -630,26 +659,31 @@ projectile_type = {
 				col.take_damage(this.damage)
 				add(this.hit_list, col)
 			end
-			if not this.pierce then
+			if not this.pierce or col.type == door_type  or col.type == chest_type then
 				destroy_object(this)
 			end
-			return
 		end
-		if not this.can_move_to(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
-			if this.ricochet then
-				this.hit_list = {}
-				-- cheap bounce calc without normals since all walls are axis-aligned
-				if not this.can_move_to(pos_to_tile(this.x + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
-					-- hit top or bottom of wall so reverse y
-					this.direction.y *= -1
-				elseif not this.can_move_to(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(this.y + TILE_HALF_SIZE)) then
-					-- hit left or right of wall so reverse x
-					this.direction.x *= -1
+		if not this.ignore_walls then
+			local t = mget(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE))
+			local is_blocked = t == WALL_TILE or t == BLOCK_TILE or t == DESK_TILE or t == BROKEN_DESK_TILE or (t == BOSS_TILE and not has_started_boss_room)
+			local is_enemy_hitting_door = t == DOOR_TILE and this.group ~= ENEMY_GROUP
+
+			if is_blocked or is_enemy_hitting_door then
+				if this.ricochet then
+					this.hit_list = {}
+					-- cheap bounce calc without normals since all walls are axis-aligned
+					if not this.can_move_through(pos_to_tile(this.x + TILE_HALF_SIZE), pos_to_tile(nexty + TILE_HALF_SIZE)) then
+						-- hit top or bottom of wall so reverse y
+						this.direction.y *= -1
+					elseif not this.can_move_through(pos_to_tile(nextx + TILE_HALF_SIZE), pos_to_tile(this.y + TILE_HALF_SIZE)) then
+						-- hit left or right of wall so reverse x
+						this.direction.x *= -1
+					end
+					-- skip setting position to nextx,nexty to prevent drilling through corners
+					return
+				else
+					destroy_object(this)
 				end
-				-- skip setting position to nextx,nexty to prevent drilling through corners
-				return
-			else
-				destroy_object(this)
 			end
 		end
 		this.x = nextx
@@ -663,15 +697,13 @@ function make_projectile(x, y, anim, damage, spd, direction)
 	return proj
 end
 
--- enemies --
--------------
-
 chest_type = {
 	init=function(this)
-		this.group,this.hp,this.anim = ENEMY_GROUP,25,make_animation({CHEST_TILE})
+		this.group,this.hp,this.anim,this.static = ENEMY_GROUP,25,make_animation({CHEST_TILE}),true
 	end,
 	take_damage=function(this, amount)
 		this.hp -= amount
+		track_dmg_dealt(amount)
 		start_hurt_object(this)
 		if this.hp <= 0 then
 			--play destroy sound
@@ -686,14 +718,98 @@ chest_type = {
 	end,
 }
 
-moose_type = {
+shield_type = {
 	init=function(this)
-		this.anim = make_animation({35,36}, 8)
+		this.anim = make_animation({59})
 	end,
 	update=function(this)
-		this.anim.update() 
 	end
 }
+
+moose_type = {
+	init=function(this)
+		this.anim,
+		this.can_interact,
+		this.is_speaking,
+		this.explode_in_anger_timer =
+			make_animation({35,36}, 8), -- animation
+			false, -- can interact
+			false, -- is speaking
+			150 -- explode timer
+	end,
+	update=function(this)
+		if did_anger_moose then
+			return
+		end
+		this.anim.update()
+		this.can_interact = check_player_can_interact() and not this.is_speaking and not did_anger_moose and flr(get_range(this, player)) <= TILE_SIZE
+		if this.can_interact and btnp(k_action) then
+			if has_spoken_to_moose and not did_anger_moose then
+				did_anger_moose = true
+				show_toast_message({
+					"destroy it or don't!",
+					"!! gah !!",
+					"<gets unreasonably angry>",
+				},
+				120,
+				function()
+					destroy_object(this)
+					for i=0,10 do
+						make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame], 500)
+					end
+					mset(pos_to_tile(this.x),pos_to_tile(this.y), FLOOR_TILE)
+					show_toast_message({
+						"         r.i.p.        ",
+						"       mr. mooshe      "
+					},90)
+				end)
+			else
+				this.is_speaking = true
+				show_toast_message({
+					"!! eeeeeeeeeeeeeeeeeeeeeee !!"
+				})
+				show_toast_message({
+					"penetant one! i mean...",
+					"",
+					"all-powerful one!",
+				})
+				show_toast_message({
+					"the goblet of grail is",
+					"not what it seems!",
+					"<panting heavily>"
+				})
+				show_toast_message({
+					"it makes you immortal but..."
+				})
+				show_toast_message({
+					"life becomes a never-ending",
+					"grind full of neck problems."
+				})
+				show_toast_message({
+					"you get suuuuper old <gags>",
+					"because that's what happens",
+					"when you can't get doid."
+				})
+				show_toast_message({
+					"destroy the grail or...",
+					"<looong sigh>"
+				})
+				show_toast_message({
+						"take it knowing it's",
+						"probably a bad idea."
+					},
+					600,
+					function()
+						has_spoken_to_moose = true
+						this.is_speaking = false
+					end)
+			end
+		end
+	end
+}
+
+-- enemies --
+-------------
 
 eye_type = {
 	init=function(this)
@@ -706,7 +822,23 @@ eye_type = {
 		this.hp,
 		this.move_rate,
 		this.move_timer,
-		this.anim=90,0,{x=2,y=3,w=4,h=5},nil,40,ENEMY_GROUP,flr(1.5 * difficulty),30,0,make_animation({48,49}, 16)
+		this.anim,
+		this.touch_damage,
+		this.projectile_damage,
+		this.is_enemy =
+			90, -- fire rate
+			0, -- fire timer
+			{x=2,y=3,w=4,h=5}, -- hitbox
+			nil, -- target
+			40, -- auto target radius
+			ENEMY_GROUP, -- group
+			get_enemy_hp_for_difficulty(2), -- hp
+			30, -- move rate
+			0, -- move timer
+			make_animation({48,49}, 16), -- anim
+			2.25, -- touch damage
+			2.5, -- range damage
+			true -- is enemy
 	end,
 	update=function(this)
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
@@ -719,7 +851,14 @@ eye_type = {
 		if this.target ~= nil and this.fire_timer <= 0 and ceil(rnd(100)) > 95 then
 			this.fire_timer = this.fire_rate
 			local dir = get_direction({x=this.x, y=this.y}, {x=this.target.x, y=this.target.y})
-			local proj = make_projectile(this.x, this.y, make_animation({46,47}, 8), 1, 0.5, dir)
+			local proj = make_projectile(
+				this.x,
+				this.y,
+				make_animation({46,47}, 8),
+				get_enemy_dmg_for_difficulty(this.projectile_damage),
+				0.5,
+				dir
+			)
 			sfx(3)
 			add(proj.collision_groups, PLAYER_GROUP)
 		end
@@ -737,7 +876,18 @@ bug_type = {
 		this.hp,
 		this.move_rate,
 		this.move_timer,
-		this.touch_damage={x=1,y=2,w=6,h=5},nil,40,make_animation({50,51}, 25),ENEMY_GROUP,flr(3 * difficulty),15,0,2
+		this.touch_damage,
+		this.is_enemy =
+			{x=1,y=2,w=6,h=5}, -- hitbox
+			nil, -- target
+			40, -- auto target radius
+			make_animation({50,51}, 25), -- anim
+			ENEMY_GROUP, -- group
+			get_enemy_hp_for_difficulty(4), -- hp
+			15, -- move rate
+			0, -- move timer
+			4, -- touch damage
+			true -- is enemy
 	end,
 	update=function(this)
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
@@ -745,7 +895,7 @@ bug_type = {
 			this.move_timer = this.move_rate
 			plan_next_move(this)
 		end
-		this.anim.update() 
+		this.anim.update()
 	end
 }
 
@@ -759,7 +909,18 @@ fang_type = {
 		this.hp,
 		this.move_rate,
 		this.move_timer,
-		this.touch_damage={x=1,y=2,w=6,h=5},nil,40,make_animation({53,54}, 40),ENEMY_GROUP,flr(2 * difficulty),5,0,2
+		this.touch_damage,
+		this.is_enemy =
+			{x=1,y=2,w=6,h=5}, -- hitbox
+			nil, -- target
+			40, -- auto target radius
+			make_animation({53,54}, 40), -- animation
+			ENEMY_GROUP, -- group
+			get_enemy_hp_for_difficulty(5), -- hp
+			5, -- move rate
+			0, -- move timer
+			3.5, -- touch damage
+			true -- is enemy
 	end,
 	update=function(this)
 		this.move_timer = clamp(this.move_timer - 1, 0, this.move_rate)
@@ -773,8 +934,6 @@ fang_type = {
 
 skull_type = {
 	init=function(this)
-		this.fire_rate,
-		this.fire_timer,
 		this.hitbox,
 		this.target,
 		this.auto_target_radius,
@@ -783,7 +942,24 @@ skull_type = {
 		this.hp,
 		this.move_rate,
 		this.move_timer,
-		this.touch_damage=45,0,{x=1,y=2,w=6,h=5},nil,40,make_animation({55,56}, 30),ENEMY_GROUP,flr(4 * difficulty),5,0,1
+		this.touch_damage,
+		this.projectile_damage,
+		this.fire_rate,
+		this.fire_timer,
+		this.is_enemy =
+			{x=1,y=2,w=6,h=5}, -- hitbox
+			nil, -- target
+			40, -- auto target radius
+			make_animation({55,56}, 30), -- anim
+			ENEMY_GROUP, -- group
+			get_enemy_hp_for_difficulty(6), -- hp
+			5, -- move rate
+			0, -- move timer
+			2.5, -- touch damage
+			3.5, -- projectile damage
+			45, --fire rate
+			0, -- fire timer
+			true -- is enemy
 	end,
 	update=function(this)
 		this.fire_timer = clamp(this.fire_timer - 1, 0, this.fire_rate)
@@ -796,7 +972,14 @@ skull_type = {
 		if this.target ~= nil and this.fire_timer <= 0 and ceil(rnd(100)) > 50 then
 			this.fire_timer = this.fire_rate
 			local dir = get_direction({x=this.x, y=this.y}, {x=this.target.x, y=this.target.y})
-			local proj = make_projectile(this.x, this.y, make_animation({60,61}, 8), 2, 0.75, dir)
+			local proj = make_projectile(
+				this.x,
+				this.y,
+				make_animation({46,47}, 8),
+				get_enemy_dmg_for_difficulty(this.projectile_damage),
+				0.75,
+				dir
+			)
 			sfx(3)
 			add(proj.collision_groups, PLAYER_GROUP)
 		end
@@ -804,17 +987,23 @@ skull_type = {
 	end
 }
 
+-- other --
+-----------
+
 door_type = {
 	init=function(this)
-		this.group = ENEMY_GROUP
-		this.hp = 15
-		this.anim = make_animation({3})
+		this.group,
+		this.hp,
+		this.anim,
+		this.static = ENEMY_GROUP,15,make_animation({3}),true
 	end,
 	take_damage=function(this, amount)
 		this.hp -= amount
+		track_dmg_dealt(amount)
 		start_hurt_object(this)
 		if this.hp <= 0 then
 			--play destroy sound
+			doors_destroyed += 1
 			mset(pos_to_tile(this.x), pos_to_tile(this.y), FLOOR_TILE)
 			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame])
 			destroy_object(this)
@@ -835,8 +1024,9 @@ trap_type = {
 		this.targetable,
 		this.active,
 		this.collidable,
-		this.projectil_damage,
-		this.projectile_speed = make_animation({19}),make_animation({20}),300,0,false,false,true,1,1
+		this.projectile_damage,
+		this.projectile_speed,
+		this.static = make_animation({19}),make_animation({20}),300,0,false,false,true,1,1,true
 
 		this.anim = this.inactive_anim
 	end,
@@ -859,53 +1049,53 @@ trap_type = {
 		local col,row,walls,mincol,maxcol,minrow,maxrow,projectiles = flr(pos_to_tile(this.x)),
 			flr(pos_to_tile(this.y)),
 			{top=false,right=false,bottom=false,left=false},
-			flr(pos_to_tile(room.x * SCREEN_SIZE)),
-			flr(pos_to_tile(room.x * SCREEN_SIZE + SCREEN_SIZE - 1)),
-			flr(pos_to_tile(room.y * SCREEN_SIZE)),
-			flr(pos_to_tile(room.y * SCREEN_SIZE + SCREEN_SIZE - 1)),
+			flr(pos_to_tile(tile_to_screen(room.x))),
+			flr(pos_to_tile(tile_to_screen(room.x) + SCREEN_SIZE - 1)),
+			flr(pos_to_tile(tile_to_screen(room.y))),
+			flr(pos_to_tile(tile_to_screen(room.y) + SCREEN_SIZE - 1)),
 			{}
 		-- yes this for-loop is terrible
 		for offset=0,15 do
 			if col - offset >= mincol and not walls.left then
-				if mget(col - offset, row) == 1 then
+				if mget(col - offset, row) == WALL_TILE then
 					walls.left = true
 					if offset > 3 then
 						add(
 							projectiles,
-							make_projectile((col - offset) * TILE_SIZE + TILE_HALF_SIZE, this.y, make_animation({52}), this.projectil_damage, this.projectile_speed, {x=1,y=0})
+							make_projectile((col - offset) * TILE_SIZE + TILE_HALF_SIZE, this.y, make_animation({52}), this.projectile_damage, this.projectile_speed, {x=1,y=0})
 						)
 					end
 				end
 			end
 			if col + offset <= maxcol and not walls.right then
-				if mget(col + offset, row) == 1 then
+				if mget(col + offset, row) == WALL_TILE then
 					walls.right = true
 					if offset > 3 then
 						add(
 							projectiles,
-							make_projectile((col + offset) * TILE_SIZE - TILE_HALF_SIZE, this.y, make_animation({52}), this.projectil_damage, this.projectile_speed, {x=-1,y=0})
+							make_projectile((col + offset) * TILE_SIZE - TILE_HALF_SIZE, this.y, make_animation({52}), this.projectile_damage, this.projectile_speed, {x=-1,y=0})
 						)
 					end
 				end
 			end
 			if row - offset >= minrow and not walls.top then
-				if mget(col, row - offset) == 1 then
+				if mget(col, row - offset) == WALL_TILE then
 					walls.top = true
 					if offset > 3 then
 						add(
 							projectiles,
-							make_projectile(this.x, (row - offset) * TILE_SIZE + TILE_HALF_SIZE, make_animation({52}), this.projectil_damage, this.projectile_speed, {x=0,y=1})
+							make_projectile(this.x, (row - offset) * TILE_SIZE + TILE_HALF_SIZE, make_animation({52}), this.projectile_damage, this.projectile_speed, {x=0,y=1})
 						)
 					end
 				end
 			end
 			if row + offset <= maxrow and not walls.bottom then
-				if mget(col, row + offset) == 1 then
+				if mget(col, row + offset) == WALL_TILE then
 					walls.bottom = true
 					if offset > 3 then
 						add(
 							projectiles,
-							make_projectile(this.x, (row + offset) * TILE_SIZE - TILE_HALF_SIZE, make_animation({52}), this.projectil_damage, this.projectile_speed, {x=0,y=-1})
+							make_projectile(this.x, (row + offset) * TILE_SIZE - TILE_HALF_SIZE, make_animation({52}), this.projectile_damage, this.projectile_speed, {x=0,y=-1})
 						)
 					end
 				end
@@ -913,7 +1103,7 @@ trap_type = {
 		end
 		foreach(projectiles, function(proj)
 			add(proj.collision_groups, PLAYER_GROUP)
-			add(proj.collision_groups, ENEMY_GROUP)
+			-- add(proj.collision_groups, ENEMY_GROUP)
 		end)
 	end
 }
@@ -930,7 +1120,8 @@ spike_type = {
 		this.reset_timer,
 		this.touch_damage,
 		this.targetable,
-		this.collidable = {x=1,y=1,w=6,h=6},{16,17,18},{5,5,100},1,0,1,100,0,0,false,true
+		this.collidable,
+		this.static = {x=1,y=1,w=6,h=6},{16,17,18},{5,5,100},1,0,1,100,0,0,false,true,true
 	end,
 	update=function(this)
 		if this.reset_timer > 0 then
@@ -942,14 +1133,14 @@ spike_type = {
 			this.frame_time = 0
 			if this.current_frame == count(this.frames) then
 				this.frame_step = -1
-				sfx(6)
+				-- sfx(6,3)
 			elseif this.current_frame == 1 then
 				if this.frame_step == -1 then
 					this.frame_step = 1
 					this.reset_timer = this.reset_time
 					return
 				else
-					sfx(5)
+					-- sfx(5,3)
 				end
 			end
 			this.current_frame += this.frame_step
@@ -970,50 +1161,194 @@ torch_type = {
 		this.targetable,
 		this.collidable,
 		this.target,
-		this.anim={x=1,y=2,w=6,h=5},false,false,nil,make_animation({57,58}, 6)
+		this.anim,
+		this.static={x=1,y=2,w=6,h=5},false,false,nil,make_animation({57,58}, 6),true
+		this.auto_target_radius = 1000
+		this.aggressive = (room.y >= 2 and room.x <= 4) and boss_hp > 0
+		this.fire_timer = rnd(10) + rnd(50) + 150
 	end,
 	update=function(this)
-		this.anim.update() 
+		this.anim.update()
+
+		if not this.aggressive then
+			return
+		end
+
+		this.fire_timer -= 1
+		this.find_player_target()
+		if this.target ~= nil and this.fire_timer <= 0 and ceil(rnd(100)) > 50 then
+			this.fire_timer = rnd(10) + rnd(50) + 150
+			local dir = get_direction({x=this.x, y=this.y+TILE_HALF_SIZE}, {x=this.target.x, y=this.target.y})
+			local proj = make_projectile(this.x, this.y + TILE_HALF_SIZE, make_animation({52}), 2, 0.75, dir)
+			proj.ignore_walls = true
+			sfx(3)
+			add(proj.collision_groups, PLAYER_GROUP)
+		end
 	end
 }
 
+-- artifact --
+--------------
 
--- portal --
-------------
-
-portal_type = {
+artifact_type = {
 	init=function(this)
-		this.frames,
-		this.frame_times,
-		this.current_frame,
-		this.frame_time,
-		this.frame_step = {21,22,23,24},{15,15,15,15},1,0,1
-		this.on_interact = function()
-			start_portal_transition(this)
-		end
-		this.is_boss_portal = false
+		this.anim,
+		this.can_interact,
+		this.has_insulted_player,
+		this.collidable,
+		this.targetable,
+		this.group =
+		make_animation({60,61}, 20),
+		false,
+		false,
+		false,
+		false,
+		ENEMY_GROUP
 	end,
 	update=function(this)
-		if player ~= nil and not player.dead and btnp(k_action) and player.x == this.x and player.y == this.y then
-			this.on_interact()
+		this.collidable = has_spoken_to_moose
+		this.targetable = has_spoken_to_moose
+		if not has_started_boss_room then
+			this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE
+		else
+			this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE and has_spoken_to_moose
 		end
-		this.frame_time += 1
-		if this.frame_time >= this.frame_times[this.current_frame] then
-			this.frame_time = 0
-			if this.current_frame == count(this.frames) then
-				this.frame_step = -1
-			elseif this.current_frame == 1 and this.frame_step == -1 then
-				this.frame_step = 1
-				this.frame_time = 0
+		if this.can_interact and btnp(k_action) then
+			if has_spoken_to_moose then
+				player.can_move = false
+				did_take_the_artifact = true
+				destroy_object(this)
+				show_toast_message({
+					"the goblet of grail is yours",
+					"  you are no longer mortal  ",
+					"   and still all-powerful   ",
+					"     <mrrrrggghllhlhlh>     "
+				},
+				600,
+				start_win_sequence
+			)
 				return
 			end
-			this.current_frame += this.frame_step
+			if is_all_powerful and not has_started_boss_room then
+				goto_boss_room()
+			elseif not this.has_insulted_player and not has_started_boss_room then
+				show_toast_message({
+					"weakling!! this is",
+					"arthur's quest, not yours.",
+					"<mumbles more insults>"
+				})
+				show_toast_message({
+					"* loot the remaining chests *"
+				})
+			end
 		end
+		this.anim.update()
 	end,
-	draw=function(this)
-		spr(this.frames[this.current_frame], this.x, this.y, 1, 1, this.frame_step == -1)
+	take_damage = function(this, amount)
+		player.can_move = false
+		for i=0,10 do
+			make_particle_group(this.x, this.y, this.anim.frames[this.anim.current_frame],500)
+		end
+		destroy_object(this)
+		show_toast_message(
+			{
+				"the goblet of grail is doid",
+				"    you're still mortal    ",
+				"but all-powerful nonetheless",
+				"          <boom>            "
+			},
+			600,
+			start_win_sequence
+		)
 	end
 }
+
+-- mirror --
+mirror_type = {
+	init=function(this)
+		this.anim,
+		this.can_interact,
+		this.static =
+		make_animation({12}),
+		false,true
+	end,
+	update=function(this)
+		this.can_interact = check_player_can_interact() and flr(get_range(this, player)) <= TILE_SIZE
+		if this.can_interact and btnp(k_action) then
+			show_player_stats_toast()
+		end
+		this.anim.update()
+	end,
+}
+
+function show_player_stats_toast()
+	local info = {
+		"     health: "..tostr(flr(player.hp)).."/"..tostr(player.max_hp),
+		"     damage: "..tostr(player.projectile_damage),
+		"  fire dist: "..tostr(flr(30/player.projectile_speed/player.projectile_lifetime*30)*8),
+		"  fire rate: "..tostr(30/player.fire_rate).."/sec",
+		"target dist: "..tostr(player.auto_target_radius),
+	}
+	show_toast_message(info)
+	show_toast_message(get_brief_world_stat_text())
+end
+
+function get_brief_world_stat_text()
+	local stat_text = {
+		"      doors: "..tostr(doors_destroyed).."/"..tostr(total_doors).."      ",
+		"     chests: "..tostr(chests_looted).."/"..tostr(total_chests).."      ",
+		"    enemies: "..tostr(enemies_destroyed).."      ",
+	}
+
+	return stat_text
+end
+
+function get_dmg_stat_text()
+	return {
+		"  dmg dealt: "..flr(total_dmg_dealt).."  ",
+		"  dmg taken: "..flr(total_dmg_taken).."  ",
+	}
+end
+
+function get_win_stat_text()
+	local stat_text = get_brief_world_stat_text()
+	add_each(stat_text, get_dmg_stat_text())
+	local extra_text = {
+		" difficulty: "..tostr(selected_difficulty == 1 and "easy" or "normal"),
+		"",
+		"",
+		"       ★ achievements ★        ",
+		""
+	}
+	-- add more with add_each(stat_text, rest)
+	if doors_destroyed >= total_doors then
+		add_each(extra_text,{
+			"◆ fbi, open up!",
+			"   -> destroy all doors"
+		})
+	end
+	if did_anger_moose then
+		add_each(extra_text,{
+			"◆ annoyer of moose",
+			"   -> he 'sploded"
+		})
+	end
+	if did_take_the_artifact then
+		add_each(extra_text,{
+			"◆ neck problems",
+			"   -> take the goblet of grail"
+		})
+	else
+		add_each(extra_text,{
+			"◆ no thanks",
+			"   -> doid the goblet of grail"
+		})
+	end
+
+	add_each(stat_text,extra_text)
+
+	return stat_text
+end
 
 -- enemy spawn point --
 -----------------------
@@ -1027,7 +1362,8 @@ enemy_spawn_point_type = {
 		this.spawn_duration_timer,
 		this.anim,
 		this.spawn_anim,
-		this.is_spawning = {},0,0,60,0,make_animation({6}),make_animation({7,8}, 8),false
+		this.is_spawning,
+		this.static = {},0,0,60,0,make_animation({6}),make_animation({7,8}, 8),false,true
 	end,
 	update=function(this)
 		if not this.is_spawning then
@@ -1044,7 +1380,7 @@ enemy_spawn_point_type = {
 				this.is_spawning = false
 				local e = init_object(rnd(this.enemy_types), this.x, this.y)
 				plan_next_move(e)
-				sfx(2)
+				-- sfx(2)
 			end
 		end
 		this.anim.update()
@@ -1061,12 +1397,12 @@ enemy_spawn_point_type = {
 }
 
 function make_enemy_spawn_point(x, y)
-	local spawn_time = flr(1/difficulty * 100)
+	local spawn_time = rnd(100) + 150
 	sp = init_object(enemy_spawn_point_type, x, y)
 	sp.spawn_time,sp.spawn_timer = spawn_time,spawn_time
-	if difficulty <= 1.1 then
+	if difficulty <= 2.5 then
 		sp.enemy_types = {eye_type, bug_type}
-	elseif difficulty <= 1.5 then
+	elseif difficulty <= 3.5 then
 		sp.enemy_types = {eye_type, bug_type, fang_type}
 	else
 		sp.enemy_types = {eye_type, bug_type, fang_type, skull_type}
@@ -1075,31 +1411,104 @@ function make_enemy_spawn_point(x, y)
 	return sp
 end
 
+-- boss door --
+---------------
+boss_door_type = {
+	init = function(this)
+		this.group,this.anim,this.static = ENEMY_GROUP,make_animation({BOSS_TILE}),true
+		this.hurt_duration = 30
+		this.hurt_duration_timer = 0
+	end,
+	take_damage = function(this, amount)
+		if this.hurt_duration_timer > 0 then
+			this.hurt_duration_timer -= 1
+			return
+		end
+		this.hurt_duration_timer = this.hurt_duration
+		boss_hp -= amount
+		if boss_hp <= 0 then
+			doors_destroyed += 1
+			start_boss_defeated()
+		else
+			start_hurt_object(this)
+		end
+	end
+}
+
+function start_boss_defeated()
+	local obj = nil
+	for i=count(objects),1,-1 do
+		local should_destroy = true
+		obj = objects[i]
+		if obj ~= player then
+			if obj.static then
+				make_particle_group(obj.x,obj.y,BOSS_TILE,rnd(250) + 250)
+				if obj.type == boss_door_type then
+					mset(pos_to_tile(obj.x),pos_to_tile(obj.y),FLOOR_TILE)
+				elseif obj.type == torch_type then
+					should_destroy = false
+					obj.aggressive = false
+				elseif obj.type == mirror_type then
+					should_destroy = false
+				else
+					mset(pos_to_tile(obj.x),pos_to_tile(obj.y),FLOOR_TILE)
+				end
+			end
+			if should_destroy then
+				destroy_object(obj)
+			end
+		end
+	end
+	make_particle_group(72*TILE_SIZE,48*TILE_SIZE,BOSS_TILE,rnd(250) + 250)
+	mset(72,48,FLOOR_TILE)
+end
+
 -- object functions --
 ----------------------
 
 function init_object(type,x,y)
 	local obj = {}
 
-	obj.type,obj.collidable,obj.targetable,obj.flip,obj.x,obj.y,obj.hitbox,obj.spd,
-	obj.moves,obj.group,obj.hp,obj.anim,obj.is_hurt,obj.hurt_duration,
-	obj.hurt_duration_timer,obj.hurt_collidable,obj.touch_damage=type,
-	true,
-	true,
-	{x=false,y=false},
-	x,
-	y,
-	{x=0,y=0,w=TILE_SIZE,h=TILE_SIZE},
-	1,
-	{},
-	NO_GROUP,
-	1,
-	nil,
-	false,
-	30,
-	0,
-	true,
-	0
+	obj.type,
+	obj.collidable,
+	obj.targetable,
+	obj.flip,
+	obj.x,
+	obj.y,
+	obj.hitbox,
+	obj.spd,
+	obj.moves,
+	obj.group,
+	obj.hp,
+	obj.anim,
+	obj.is_hurt,
+	obj.hurt_duration,
+	obj.hurt_duration_timer,
+	obj.hurt_collidable,
+	obj.static,
+	obj.touch_damage,
+	obj.can_interact,
+	obj.is_enemy =
+	type, -- type
+	true, -- collidable
+	true, -- targetable
+	{x=false,y=false}, -- flip
+	x, -- pos y
+	y, -- pos x
+	{x=0,y=0,w=TILE_SIZE,h=TILE_SIZE}, -- hitbox
+	1, -- speed
+	{}, -- moves
+	NO_GROUP, -- group
+	1, -- hp
+	nil, -- anim
+	false, -- is hurt
+	30, -- hurt duration
+	0, -- hurt duration timer
+	true, -- hurt collidable
+	false, -- static
+	0, -- touch damage
+	false, -- can interact
+	false -- is enemey
 
 	obj.collide=function(groups)
 		local other
@@ -1142,6 +1551,11 @@ function init_object(type,x,y)
 		return fget(mget(x,y)) == 0
 	end
 
+	obj.can_move_through = function(x,y)
+		local t = mget(x,y)
+		return fget(t) == 0 or (fget(t,7))
+	end
+
 	obj.move_to = function(x,y)
 		add(obj.moves, {x=x, y=y})
 	end
@@ -1149,9 +1563,17 @@ function init_object(type,x,y)
 	obj.take_damage = function(amount)
 		if obj.type.take_damage ~= nil then
 			obj.type.take_damage(obj, amount)
+			if obj.is_enemy then
+			end
 		else
+			if obj.is_enemy then
+				track_dmg_dealt(amount)
+			end
 			obj.hp -= amount
 			if obj.hp <= 0 then
+				if obj.is_enemy then
+					track_enemy_destroyed()
+				end
 				if obj.anim ~= nil then
 					make_particle_group(obj.x,obj.y, obj.anim.frames[obj.anim.current_frame])
 				else
@@ -1161,10 +1583,10 @@ function init_object(type,x,y)
 				-- instead check if obj has on_destroy
 				-- which should handle spawning pickups
 				if obj.type ~= player_type then
-					if rnd(1000) > 900 then
-						make_hp_pickup(obj.x,obj.y,flr((rnd(3) + 1)) * difficulty)
-					elseif rnd(1000) > 100 then
-						make_gems_pickup(obj.x,obj.y,flr((rnd(5) + 3) * difficulty))
+					if rnd(1000) > 750 then
+						make_hp_pickup(obj.x,obj.y,ceil(rnd(difficulty) + 1))
+					-- elseif not has_started_boss_room and rnd(1000) > 100 then
+					-- 	make_gems_pickup(obj.x,obj.y,flr((rnd(5) + 3) * difficulty))
 					end
 					sfx(4)
 				end
@@ -1236,7 +1658,10 @@ end
 function start_hurt_object(obj)
 	obj.is_hurt,
 	obj.hurt_duration_timer,
-	obj.collidable = true,obj.hurt_duration,obj.hurt_collidable
+	obj.collidable =
+		true,
+		obj.hurt_duration,
+		obj.hurt_collidable
 end
 
 function update_hurt_object(obj)
@@ -1244,6 +1669,15 @@ function update_hurt_object(obj)
 	if obj.hurt_duration_timer <= 0 then
 		obj.is_hurt = false
 		obj.collidable = true
+	end
+end
+
+function update_toasts()
+	if toast_msg_window != nil then
+		toast_msg_window.update(toast_msg_window)
+	elseif count(toast_msg_queue) > 0 then
+		toast_msg_window = toast_msg_queue[1]
+		del(toast_msg_queue, toast_msg_window)
 	end
 end
 
@@ -1269,15 +1703,13 @@ function add_random_move(obj)
 end
 
 function plan_next_move(obj)
-	if player == nil or count(obj.moves) > 0 then
+	if player == nil or count(obj.moves) > 0 or obj.is_hurt then
 		return
 	end
 	local range = get_range(obj, player)
 	if player.dead or range > obj.auto_target_radius then
 		add_random_move(obj)
 		return
-	-- elseif range <= TILE_SIZE * 1.5 then
-	-- 	return
 	end
 	local m = get_manhattan(obj, player)
 	if (m.x == 0 and m.y == 0) then
@@ -1418,12 +1850,12 @@ function draw_object(obj)
 	elseif obj.anim ~= nil then
 		obj.anim.draw(obj)
 	end
+	if obj.can_interact then
+		print("❎", obj.x,obj.y-6,12)
+	end
 	if debug then
 		rect(obj.x+obj.hitbox.x,obj.y+obj.hitbox.y,obj.x+obj.hitbox.x+obj.hitbox.w-1,obj.y+obj.hitbox.y+obj.hitbox.h-1,8)
 	end
-	-- if obj.hp and obj ~= player then
-	-- 	print(tostring(obj.hp), obj.x, obj.y, 8)
-	-- end
 end
 
 function draw_particles()
@@ -1441,7 +1873,9 @@ function draw_ui()
 		return
 	end
 	draw_hp_bar()
-	draw_gems_bar()
+	if has_started_boss_room and boss_hp > 0 then
+		draw_boss_hp_bar()
+	end
 end
 
 function draw_hp_bar()
@@ -1455,22 +1889,18 @@ function draw_hp_bar()
 	pal()
 end
 
-function draw_gems_bar()
-	local yoffset,pad,w,h = 3,1,31,2
-	rectfill(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + w + pad, camera_pos.y + h + pad + yoffset, 0)
-	rectfill(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + pad + flr(player.gems/player.max_gems*w), camera_pos.y + h + pad + yoffset, 11)
-	rect(camera_pos.x + pad, camera_pos.y + pad + yoffset, camera_pos.x + w + pad, camera_pos.y + h + pad + yoffset, 7)
+function draw_boss_hp_bar()
+	left,top,w,h=camera_pos.x+6*TILE_SIZE,camera_pos.y+1,39,5
+	rectfill(left, top, left + w, top + h, 0)
+	rectfill(left, top, left + flr(boss_hp/max_boss_hp*w), top + h, 8)
+	rect(left, top, left+w, top+h, 7)
 end
+
 
 -- rooms --
 -----------
 
 function start_room_transition(x_index, y_index)
-	if overload_portal ~= nil then
-		destroy_object(overload_portal)
-		overload_portal = nil
-	end
-	
 	foreach(objects, function(obj)
 		if obj.type ~= player_type then
 			add(transition_objects, obj)
@@ -1492,19 +1922,19 @@ function start_room_transition(x_index, y_index)
 			ty = r*TILE_SIZE
 			tile_type = mget(c,r)
 			if tile_type == DOOR_TILE then
+				-- this does allow projectiles to go through doors when "pierce" is true
+				mset(c,r,DOOR_TILE)
 				init_object(door_type, tx, ty)
 			elseif tile_type == ENEMY_SPAWN_TILE then
 				make_enemy_spawn_point(tx,ty)
 			elseif tile_type == SPIKE_TILE then
+				mset(c,r,FLOOR_TILE)
 				init_object(spike_type, tx, ty)
 			elseif tile_type == TORCH_TILE then
 				mset(c, r, WALL_TILE)
 				init_object(torch_type, tx, ty)
 			elseif tile_type == TRAP_TILE then
 				init_object(trap_type, tx, ty)
-			-- elseif tile_type == PORTAL_TILE then
-			-- 	mset(c, r, FLOOR_TILE)
-			-- 	init_object(portal_type, tx, ty)
 			elseif tile_type == VENDOR_TILE then
 				mset(c, r, FLOOR_TILE)
 				if vendor == nil then
@@ -1513,33 +1943,44 @@ function start_room_transition(x_index, y_index)
 					add(objects, vendor)
 				end
 			elseif tile_type == UPGRADE_HP_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_max_hp)
+				place_upgrade_chest(c,r,tx,ty,upgrade_hp)
 			elseif tile_type == UPGRADE_DMG_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_projectile_damage)
+				place_upgrade_chest(c,r,tx,ty,upgrade_damage)
 			elseif tile_type == RICOCHET_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_max_hp,upgrade_projectile_ricochet)
+				place_upgrade_chest(c,r,tx,ty,upgrade_projectile_ricochet)
 			elseif tile_type == PIERCE_TILE then
 				place_upgrade_chest(c,r,tx,ty,upgrade_projectile_pierce)
-			elseif tile_type == SATCHEL_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_max_gems)
 			elseif tile_type == FAST_SHOT_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_fast_shot)
-			elseif tile_type == OVERLOAD_TILE then
-				place_upgrade_chest(c,r,tx,ty,upgrade_overload)
+				place_upgrade_chest(c,r,tx,ty,upgrade_fire_rate)
+			elseif tile_type == SNOIPER_TILE then
+				place_upgrade_chest(c,r,tx,ty,upgrade_target_radius)
+			elseif tile_type == THE_DISTANCE_TILE then
+				place_upgrade_chest(c,r,tx,ty,upgrade_projectile_lifetime)
+			elseif tile_type == BOSS_TILE and room.x == 4 and room.y == 3 then
+				init_object(boss_door_type,tx,ty)
+			elseif tile_type == MOOSE_TILE then
+				mset(c,r,NO_PASS_FLOOR_TILE)
+				init_object(moose_type,tx,ty)
+			elseif tile_type == MIRROR_TILE then
+				mset(c,r,BLOCK_TILE)
+				init_object(mirror_type,tx,ty)
+			elseif tile_type == ARTIFACT_TILE then
+				mset(c,r,NO_PASS_FLOOR_TILE)
+				init_object(artifact_type,tx,ty)
 			end
 		end
 	end
 end
 
 function place_upgrade_chest(c,r,x,y,upgrade_type)
-	mset(c, r, BLOCK_TILE)
+	mset(c, r, NO_PASS_FLOOR_TILE)
 	make_upgrade_pickup(x, y, upgrade_type)
 	init_object(chest_type, x, y)
 end
 
 function update_room_transition()
 	player.move()
-	local diffx,diffy = room.x * SCREEN_SIZE - camera_pos.x, room.y * SCREEN_SIZE - camera_pos.y
+	local diffx,diffy = tile_to_screen(room.x) - camera_pos.x, tile_to_screen(room.y) - camera_pos.y
 
 	if diffx ~= 0 then
 		camera_pos.x += camera_spd * sign(diffx)
@@ -1558,71 +1999,99 @@ end
 
 function end_room_transition()
 	update_fn = game_update
-	local transition_obj
+	local obj,t,tilex,tiley =
+	nil,nil,0,0
 	for i=count(transition_objects),1,-1 do
-		transition_obj = transition_objects[i]
-		del(transition_objects, transition_obj)
-		if transition_obj.type == door_type then
-			mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),DOOR_TILE)
-		elseif transition_obj.type == torch_type then
-			mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),TORCH_TILE)
-		-- elseif transition_obj.type == portal_type then
-		-- 	mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),PORTAL_TILE)
-		elseif transition_obj.type == vendor_type then
-			mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),VENDOR_TILE)
-		elseif transition_obj.type == pickup_type and transition_obj.spr > 0 then
-			mset(pos_to_tile(transition_obj.x),pos_to_tile(transition_obj.y),transition_obj.spr)
+		obj = transition_objects[i]
+		t = obj.type
+		tilex,tiley = pos_to_tile(obj.x),pos_to_tile(obj.y)
+		del(transition_objects, obj)
+		if t == door_type then
+			mset(tilex,tiley,DOOR_TILE)
+		elseif t == spike_type then
+			mset(tilex,tiley,SPIKE_TILE)
+		elseif t == torch_type then
+			mset(tilex,tiley,TORCH_TILE)
+		elseif t == vendor_type then
+			mset(tilex,tiley,VENDOR_TILE)
+		elseif t == pickup_type and obj.spr > 0 then
+			mset(tilex,tiley,obj.spr)
+		elseif t == moose_type then
+			mset(tilex,tiley,MOOSE_TILE)
+		elseif t == artifact_type then
+			mset(tilex,tiley,ARTIFACT_TILE)
+		elseif t == mirror_type then
+			mset(tilex,tiley,MIRROR_TILE)
 		end
 	end
 end
 
 function goto_boss_room()
-	-- init boss room objects
-	-- set camera pos
-	-- set player pos
-end
+	room.x,
+	room.y,
+	has_started_boss_room,
+	camera_pos.x,
+	camera_pos.y,
+	player.x,
+	player.y =
+	4, -- room y
+	3, -- room x
+	true, -- started boss room
+	tile_to_screen(4), -- cam x
+	tile_to_screen(3), -- cam y
+	66 * TILE_SIZE, -- player y
+	49 * TILE_SIZE -- player x
 
-function start_portal_transition(portal)
-	if room.x == 0 and room.y == 0 then
-		-- leaving main room
-		local open_pos = get_open_pos_next_to(last_portal_used.pos.x, last_portal_used.pos.y)
-		room.x,
-		room.y,
-		camera_pos.x,
-		camera_pos.y,
-		player.x,
-		player.y,
-		player.moves = last_portal_used.room.x,last_portal_used.room.y,last_portal_used.room.x * 128,last_portal_used.room.y * 128,open_pos.x,open_pos.y,{}
-
-		destroy_object(portal)
-		start_room_transition(room.x, room.y)
-	else
-		-- entering main room
-		last_portal_used.room.x,
-		last_portal_used.room.y,
-		last_portal_used.pos.x,
-		last_portal_used.pos.y,
-		room.x,
-		room.y,
-		camera_pos.x,
-		camera_pos.y,
-		player.x,
-		player.y,
-		player.moves = room.x,room.y,portal.x,portal.y,0,0,0,0,64,64,{}
-
-		start_room_transition(room.x, room.y)
-		init_object(portal_type, 56, 64)
-	end
+	start_room_transition(room.x,room.y)
 	camera(camera_pos.x, camera_pos.y)
 	end_room_transition()
+	music(-1)
+	music(54,4000)
 end
 
-function update_portal_transition()
-	end_portal_transition()
-end
+-- difficulty --
+----------------
 
-function end_portal_transition()
-	end_room_transition()
+difficulty_choices ={
+	"easy",
+	"normal",
+}
+selected_difficulty = 2
+difficulty_window = {
+	update=function()
+		if btnp(k_up) then
+			selected_difficulty = clamp(selected_difficulty - 1, 1, 2)
+		elseif btnp(k_down) then
+			selected_difficulty = clamp(selected_difficulty + 1, 1, 2)
+		elseif btnp(k_action) then
+			if selected_difficulty == 1 then
+				enemy_hp_scale = 0.35
+				enemy_dmg_scale = 0.25
+			end
+			window = nil
+			update_fn = game_update
+			music(59,4000)
+		end
+	end,
+	draw=function()
+		rectfill(29,48,106,88,5)
+		rect(28,48,106,88,0)
+		print("choose difficulty",34,50,7)
+		for i=1,count(difficulty_choices) do
+			local is_selected = selected_difficulty == i
+			print(
+				(is_selected and "* " or "  ")..difficulty_choices[i],
+				52,
+				62 + ((i-1) * 7),
+				is_selected and 12 or 7
+			)
+		end
+		print("press ❎ to confirm", 30,82, 7)
+	end
+}
+function show_select_difficulty_window()
+	window = difficulty_window
+	update_fn = difficulty_window.update
 end
 
 -- death --
@@ -1631,6 +2100,7 @@ end
 death_window_delay = 120
 death_window_delay_timer = 0
 start_death_transition = function()
+	music(-1)
 	sfx(1)
 	death_window_delay_timer = death_window_delay
 	update_fn = update_death
@@ -1653,22 +2123,139 @@ death_window = {
 		end
 	end,
 	draw = function()
-		local window_rect = {left=camera_pos.x + 8, top=camera_pos.y+40, right=camera_pos.x + 119, bottom=camera_pos.y + 91}
-		local pad = 4
+		local stat_text = get_brief_world_stat_text()
+		add_each(stat_text, get_dmg_stat_text())
+		local pad,stats_top_offset,window_rect = 
+			4,
+			17,
+			{left=camera_pos.x + 8, top=camera_pos.y+40, right=camera_pos.x + 119, bottom=camera_pos.y + 100}
 		rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 0)
 		rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 8)
 		spr(11, window_rect.left + 27, window_rect.top + pad - 2)
 		print("you doid", window_rect.left + 40, window_rect.top + pad)
+		for i=1,count(stat_text) do
+			print(stat_text[i], window_rect.left + pad + 1, window_rect.top + ((4+2) *(i-1)) + stats_top_offset, 7)
+		end
 		spr(11, window_rect.left + 76, window_rect.top + pad - 2, 1, 1, true)
-		print("press x to restart", window_rect.left + 21, window_rect.bottom - pad * 2, 7)
+		print("press ❎ to play again", window_rect.left + 13, window_rect.bottom - pad * 1.5, 7)
 	end
 }
+
+-- win --
+---------
+
+win_window_restart_timer = 500
+win_player_spr = nil
+win_fireworks_timer = 0
+win_window = {
+	update = function()
+		if win_window_restart_timer > 0 then
+			win_window_restart_timer -= 1
+		end
+		if win_window_restart_timer <= 0 and btnp(k_action) then
+			run()
+		end
+		if win_fireworks_timer <= 0 then
+			win_fireworks_timer = 600
+			for i=1,10 do
+				make_particle_group(camera_pos.x + rnd(SCREEN_SIZE), camera_pos.y + rnd(SCREEN_SIZE-8) + 8, flr(rnd(64))+1, win_fireworks_timer)
+			end
+		else
+			win_fireworks_timer -= 1
+		end
+	end,
+	draw = function()
+		local pad,stats_top_offset,text_content,window_rect = 
+			2,
+			12,
+			get_win_stat_text(),
+			{left=camera_pos.x, top=camera_pos.y, right=camera_pos.x + 127, bottom=camera_pos.y + 127}
+		rectfill(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 0)
+		rect(window_rect.left, window_rect.top, window_rect.right, window_rect.bottom, 3)
+		spr(ARTIFACT_TILE + 1, window_rect.left + pad + 1, window_rect.top + pad + 1)
+		spr(ARTIFACT_TILE, window_rect.right - TILE_SIZE - pad + 1, window_rect.top + pad, 1, 1)
+		spr(ARTIFACT_TILE, window_rect.left + pad + 1, window_rect.bottom - pad * 5)
+		spr(ARTIFACT_TILE + 1, window_rect.right - TILE_SIZE - pad + 1, window_rect.bottom - pad * 5 + 1, 1, 1)
+		spr(win_player_spr, window_rect.left + SCREEN_SIZE/2 - TILE_HALF_SIZE, window_rect.top + 49)
+		for i=1,count(text_content) do
+			print(text_content[i], window_rect.left + pad, window_rect.top + ((4+2) *(i-1)) + stats_top_offset, 13)
+		end
+		if win_window_restart_timer <= 0 then
+			print("press ❎ to play again", window_rect.left + 21, window_rect.bottom - pad * 4, 3)
+		end
+	end
+}
+
+function start_win_sequence()
+	win_player_spr = did_take_the_artifact and 33 or 32
+	has_started_win_sequence = true
+	update_fn = win_update
+	window = win_window
+end
+
+function win_update()
+	if window ~= nil then
+		window.update()
+	end
+	foreach(objects,function(obj)
+		if obj ~= player and obj.type.update~=nil then
+			obj.type.update(obj)
+		end
+	end)
+	update_toasts()
+	update_particles()
+end
 
 -- utils --
 -----------
 
+function get_total_text_width(text_list)
+	local tmp_w, w = 0,0
+	foreach(text_list, function(msg)
+		tmp_w = text_w_px(msg)
+		if tmp_w > w then
+			w = tmp_w
+		end
+	end)
+
+	return w
+end
+
+function add_each(list_a, list_b)
+	foreach(list_b, function(item)
+		add(list_a, item)
+	end)
+end
+
+function check_player_can_interact()
+	return window == nil and count(toast_msg_queue) == 0 and player ~= nil and not player.dead and not has_started_win_sequence
+end
+
+function increase_difficulty(amount)
+	difficulty += amount
+end
+
+function track_dmg_dealt(amount)
+	total_dmg_dealt += amount
+end
+function track_enemy_destroyed()
+	enemies_destroyed += 1
+end
+
+function get_enemy_hp_for_difficulty(base_hp)
+	return base_hp * difficulty * enemy_hp_scale
+end
+
+function get_enemy_dmg_for_difficulty(base_dmg)
+	return base_dmg * difficulty * enemy_dmg_scale
+end
+
+function tile_to_screen(v)
+	return v * SCREEN_SIZE
+end
+
 function pos_to_tile(v)
-	return v/TILE_SIZE
+	return flr(v/TILE_SIZE)
 end
 
 function text_w_px(text)
@@ -1692,10 +2279,10 @@ function get_open_pos_next_to(x, y)
 end
 
 function is_move_to_next_room(x,y)
-	return x > room.x * SCREEN_SIZE + SCREEN_SIZE - 1 or
-		x < room.x * SCREEN_SIZE or
-		y > room.y * SCREEN_SIZE + SCREEN_SIZE - 1 or
-		y < room.y * SCREEN_SIZE
+	return x > tile_to_screen(room.x) + SCREEN_SIZE - 1 or
+		x < tile_to_screen(room.x) or
+		y > tile_to_screen(room.y) + SCREEN_SIZE - 1 or
+		y < tile_to_screen(room.y)
 end
 
 function clamp(value, min, max)
@@ -1738,38 +2325,38 @@ function get_manhattan(pos,dest)
 	return {x=flr(dest.x-pos.x),y=flr(dest.y-pos.y)}
 end
 __gfx__
-00000000555005556777777644c44c4467777776aa5555aa67766776090000900900009000220220008808800085880000858800880000886777777669a99a96
-000000005050050576777767cc4444cc76777767a9a55a9a76555567909090099909909902882882082282280858858008588580800000087444444774944947
-0070070055000055776776774c4cc4c4755575555a5aa5a5755665570000009009000000028888820822222805787780056866800000000049a99a9445555554
-00077000000000007776677744cccc447776677755aaaa5565677656090900000000909002888882082222280568765005786750000000004494494445555554
-00077000000000007776677744cccc447776677755aaaa55656776560000909009090000002888200082228008777750086666500000000049a99a9449a99a94
-0070070055000055776776774c4cc4c4776776775a5aa5a5755665570900000000000090000282000008280005877850058668500000000049a99a9449a99a94
-000000005050050576777767cc4444cc76777767a9a55a9a765555679009090999909099000020000000800005858580058585808000000849a99a9449a99a94
-00000000555005556777777644c44c4455575556aa5555aa67766776090000900900009000000000000000000855858008558580880000884444444444444444
-000000000000000005000500677667766776677600cccc0000cccc0000cccc0000cccc0045445454000000000000000000000000000000000000000000000000
-0000000005000500055005507ffffff7767777670c0cccc00c00ccc00c000cc00c0000c0445454450000000000000000000000000000000000cc0000000cc000
-0555055505550555055505557f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c55454454000808000002020000033000000bb00000c1ccc000cc1c00
-000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c666566560082828000282820003bb30000b33b0000c111c00c111cc0
-000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c995995590082228000288820003bb30000b33b000c111c000cc111c0
-0000000000000000500050007f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c45445444000828000002820000033000000bb0000ccc1c0000c1cc00
-0000000050005000550055007ffffff7767777670c0cccc00c00ccc00c000cc00c0000c044544544000080000000200000000000000000000000cc00000cc000
-555055505550555055505550677667766776677600cccc0000cccc0000cccc0000cccc0095999599000000000000000000000000000000000000000000000000
-003330000000000067777776f000000ff000000f000220000002200044444444004444000ccc000000777000022002200c7c0000055775500000000000000000
-0053500000000000867ff768f000000ff000000f002112000021120044444444040000400711cccc0077770c278228820c77cccc555555550099990000aaaa00
-0018100000000000786556780f0000f00f0000f00028e200002e820044444444040330407771111c0770777c777888827777711c55555555099aa9900aa99aa0
-0353530000000000785ff5870044440000444400025115200251152066666666403bb3040711711c077007cc278878820c77171c5555555509a99a900a9aa9a0
-033533000000000087fb3f780454450000544540021b31200213b12099499949943bb344c11777c07700cccc28877782c17117705507705509a99a900a9aa9a0
-085358000000000078f3bf8700411440044114000213b120021b31204444444444444444c11171c07700000002887820c11777775cc77cc5099aa9900aa99aa0
-0030300000000000887ff8880444440000444440020dd020020dd0204444444444944944cccc11c07000000000288200cccc177055cccc550099990000aaaa00
-0030300000000000878ff7780000044004400000020dd020020dd02094999499044444400000ccc070000000000220000000c7c0055cc5500000000000000000
-00003000000000000111111001111110000000000009900000999900000000000e2ee2e090000000000000090999999000000000000000000000000000000000
-000330000000300011111111011111100000000009299290009229000e2ee2e0022ee220000a00000090a000900dd00900999a00009aaa0000ee920000e22200
-00333300000330001211112111111111008888000299992009722790022ee220022ee2200009990000a99900900dd0090a9aa9900aa99a9002e22ee0029ee9e0
-033bb33000333300122112211111111108aa9a809299992992722729022ee2202ee22ee20059a5099059a50090dddd0909a9aa900a99a9a00929a2e002ea9e20
-03b33b30033bb33012e11e211211112189a99a9899999999922222292ee22ee2029a9a20005555000055550009dddd9009aa9a900a9a99a00e2a929002e9ae20
-03b37b3033b33b3312e11e2112e11e2108aaa980997227999722227902eeee200ea9a9e00004400000044000090dd090099aa9a009a99aa00ee22e200e9ee920
-033bb33033b37b33111111111111111100888800097997900972279002eeee2002eeee2000044000000440000090090000a9990000aaa9000029ee0000222e00
-00333300033bb3300111111001111110000000000099990000999900002ee200002ee20000000000000000000009900000000000000000000000000000000000
+00000000555005556777777644c44c4467777776aa5555aa67766776000000000888888044444444454454540085880044455444880000884444444400444400
+000000005050050576777767cc4444cc76777767a9a55a9a765555670088880080000008444444444454544508588580445c75448000000849a99a9404000040
+0070070055000055776776774c4cc4c4776776775a5aa5a575566557080000808008800844444444554544540578778045c77c540000000049a99a9404033040
+00077000000000007776677744cccc447776677755aaaa556567765608088080808008086666666666656656056876506577c7560000000044944944403bb304
+00077000000000007776677744cccc447776677755aaaa55656776560808808080800808994999499959955908777750957c77590000000049a99a94943bb344
+0070070055000055776776774c4cc4c4776776775a5aa5a575566557080000808008800844444444454454440587785045c77c540000000049a99a9444444444
+000000005050050576777767cc4444cc76777767a9a55a9a7655556700888800800000084444444444544544058585804457c5448000000849a99a9444944944
+00000000555005556777777644c44c4467777776aa5555aa67766776000000000888888094999499959995990855858099455499880000884444444404444440
+000000000000000005000500677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000088000000000000000000000000
+0000000005000500055005507ffffff7767777670c0cccc00c00ccc00c000cc00c0000c0000111000000000000000000000008080088880000cc0000000cc000
+0555055505550555055505557f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c011000100008080000020200088888088888880000c1ccc000cc1c00
+000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c100000010082828000282820080088088800888800c111c00c111cc0
+000000000000000000000000677667766f7ff7f6c0ccccccc00cccccc00000ccc000000c10000001008222800028882000088888008888880c111c000cc111c0
+0000000000000000500050007f6ff6f77ffffff7c00cccccc00cccccc00000ccc000000c01000110000828000002820000088888008808880ccc1c0000c1cc00
+0000000050005000550055007ffffff7767777670c0cccc00c00ccc00c000cc00c0000c000111000000080000000200000880000008000080000cc00000cc000
+555055505550555055505550677667766776677600cccc0000cccc0000cccc0000cccc0000000000000000000000000000000000008888880000000000000000
+00333000003510006777777650000005500000050002200000022000000110000000a0000ccc000011555511022002200000100000cccc000000000000000000
+0053500000338000867ff7685000000550000005002112000021120000001100000600000b11cccc001551002b8228820001d1000ccccbc00099990000aaaa00
+00181000003510007865567805000050050000500028e200002e82001000011000e6e000bbb1111c00111100bbb88882011ddd100cccccc0099aa9900aa99aa0
+0353530003535300785ff5870044440000444400025115200251152011011b710eeeee000b11b11c001bb1002b88b8821dbdd1d10cc1cbc009a99a900a9aa9a0
+033533000335330087fb3f780454450000544540021b31200213b120011bbbb10ebbbb20c11bbbc000b11b00288bbb821ddbbdd10cc1cc0009a99a900a9aa9a0
+085358000853580078f3bf8700411440044114000213b120021b3120001bb11002222222c111b1c0055115500288b82001ddd1100cccbc00099aa9900aa99aa0
+0030300000303000887ff8880444440000444440020dd020020dd0200001100002bbbbb2cccc11c000022000002882000011100000cbc0000099990000aaaa00
+0030300000303000878ff7780000044004400000020dd020020dd02000000000022222220000ccc000022000000220000000000000cc00000000000000000000
+00003000000000000111111001111110000000000009900000999900000000000e2ee2e09000000000000009099999900000000044444440a000000000000000
+000330000000300011111111011111100000000009299290009229000e2ee2e0022ee220000a00000090a000900dd009444444404a989a4000ee920000e22200
+00333300000330001211112111111111008888000299992009722790022ee220022ee2200009990000a99900900dd009489a984049999940a2e22ee0029ee9e0
+033bb33000333300122112211111111108aa9a809299992992722729022ee2202ee22ee20059a5099059a50090dddd0949999940049994000929a2e002ea9e20
+03b33b30033bb33012e11e211211112189a99a9899999999922222292ee22ee2029a9a20005555000055550009dddd9004999400004940000e2a929002e9ae20
+03b37b3033b33b3312e11e2112e11e2108aaa980997227999722227902eeee200ea9a9e00004400000044000090dd09000494000004940000ee22e200e9ee920
+033bb33033b37b33111111111111111100888800097997900972279002eeee2002eeee2000044000000440000090090000494000049994000029ee0000222e00
+00333300033bb3300111111001111110000000000099990000999900002ee200002ee20000000000000000000009900004999400000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1802,66 +2389,66 @@ __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000101020101000000000000000001010101010101010101010101010100000000010101010101020100000000000
+00000000101093202020931010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000102031201000000000000000101020012020202020200120202020100000000010202020202020100000000000
+00000000101010202020101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000010b220201000000000000000102001202020202020202001202020100000000010202020202020100000000000
+00000000101010202020101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10101010101010101010101010000000000000101020101000000000000000102031101010101010101010206020100000000010209320202020100000000000
+00000000101093202020931010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020202020202020202010000000000000102031c21000000000000000101020101010101010100010202020100000000010202020202020100000000000
+00000000101010202020101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10209320202020202020202010101010100000102020201000000000000000101020102020202020100010202020100010101010202020202020100000000000
+00000000101010202020101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020200120012020202020202020100000101020101000000000000000102031300120202020100010208220100010202020010120209320100000000000
+00000000101093202020931010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+102020200120202001202020102020821010101010311010101010101010101020c2102020602020100010101010100010202020208220202020100000000000
+00000000101010202020101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202001202031202001202010c0a0a0101020202020209320202020202010101010102020202020100000000000000010202020200101101010101010100000
+00000000101010202020101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+102020722020c3222020202020202020203020202020202020202020202030202020202020202020931010101010101010209320202020102020202020100000
+00000000101093202020931010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202001202031202001202010101010101020932020202020202020202010101010101010102020202020202020201010202020202020102001200120100000
+00000000101010202020101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+102020200120202001202020100000000010101010100101100101101010101010b2012020102020202020202020101010102020202020102020b22020100000
+00000000101010202020101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020200120012020202010000000000000102020202020202020201000001001202020102020202020602020302020302020209320102001200120100000
+00000000101093202020931010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10209320202020202020202010000000000000102060202092202060201000001020202020102020202020202020101010102020202020300120202020100000
+00000000101010202020101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020202020202020202010000000000000102020202020202020201000001020202031302020202020202020100000102020202020102001202020100000
+00000000101010202020101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10101010101010101010101010000000000000101010101010101010101000001010101010101010101010101010100000101010101010101010101010100000
+00000000101093202020931010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 10101010101010101010101010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-102092201010505050501010b292b210000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020100010105010100010202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020105050505050501020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202220101010505050101010202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202220105050505050501020602010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10c00190101050505050501010202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10913191105050505050501020402010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10203120939350505050509393202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020935050505050509340204010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020202020206020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 10202020202020202020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202031202031202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020202060206020602020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 10202020202020202020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10202020202020202020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020602020206020202060202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 10202020202020202020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-10206020202020202020202020602010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020202020206020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020202020202020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+10202020202020206020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 10202020202020202020202020202010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1997,51 +2584,169 @@ __label__
 55555555555555555555555555555555555555555555555555555555666666666666666655555555555555555555555555555555555555555555555555555555
 
 __gff__
-0101000300010000000000000000010000000000000000000001000000000000000000000000000100000000000000000000000000000000000101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101000381810000000101000100010000000000000000000000000000000000000000000000000000000000000000000000000000000000000101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __map__
-0101010101010505050501010101010101010101010101010101010101010101010101010101010000000000000000000101010101010101010101010101010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-01020202010505050505050102020201010202020202020202020201022b0201010202020202010000000000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102250201050505050505010216020101020202020202020202020102020201010104020402010000000000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0127272701050505050505010202020101020201020202020202020102020202020302040202010000000000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020239050505050505390202020101020601020202020202020102020201010104020402010000000000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020102020201010202020202010000000000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020102020201010202020202010101010000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-010202020202020202020202020202010102020202020202020202010202020101020206020202022b010000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020202020202020202020202020102060201010202020202020202010000000000000102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020102020201010202020202020202010101010101010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020102020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020102020201010202020202020202020204020401010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020601020202020202020302020201010202020202020206020202040203020202020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020201020202020202020102020201010202020202020202020204020401010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020102020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101010101010102010101010101010101010101010101010102010101010101010101010101010101010101010101010101010101010101010101010101010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101010101010102010101010101010101010101010101010102010101010101010101010101010101010101010101010101010101010101010101010101010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020103010202020202020101020202020202020103010202020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020402040202020202020101020202020202020213020202020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020204020202020202020101020202020202020202020202020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0106020202020202020202020202060101020202020202020202020202020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020202020202020202020201010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020202020202020202020202020101020202020101010101010101010101010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020101010101010101010101010101130202020602020202020201020202010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102040204020202060202020402040101030102020202020202020201060202010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102020402020202020202020204020202020102020202020202020201020202010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0102040204020202020202020402040101010102020602020202020203020202010202020202020202020202020202010102020202020202020202020202020100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101010101010101010101010101010100000000000000000000000101010101000101010101010000000000000000000000000000000000000000000000000000010101010101010101010101010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01020202010001010501010001020201000000000000000000000001022c0201000102020202010000000000000000000000000000000000000001010101010000010101010101013901010101010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102250201010105050501010102020100000000000000000000000102020201010101021002010000000000000000000000000000000000000001102a10010000010101020202020202020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010c090901010505050505010102020100000000000000000000000102020202020203100202010000000000000000000000000000000000000001021002010000000101020202023c02020202010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020239390505050505393902020100000000000000000000000102020201010139021002010000000000000000000000000000000000000001020202010000000101390202020202020239010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020100010101010101010000000102060201000102020202010000000000000000000000000000000000000001020202010000000001010202020202020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020100010202020202010000000102020201000102020202010101010000000000000000000000000101010101020202010000000001010202022302020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010202020202020202020202020202010101020202020201000000010202020100010202020202022901000000000000000000000000012b020202020602010000000001010202020202020201010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020202030202020202010101010102020201000102060202020202010000000000000000000000000102020202020202010000000001013902020202023901010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020101010202020602020202020102020201000102020202020202010101010100000001010101010102020202020202010000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020100010202020202020202020302020201000102020202020202020202020100000001020202020202020202020202010000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020100010101010102020602020102020201000102020202020202020202390101010101010210020202020202020602010000000000010139020202390101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01020202020202020202020202020201000000000001020202020201010101010001022b0202020206020202030202020202031002020202060202020202010000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020100000000000102020202020100000000000102020202020202020202010101010101390210020202021002020202010000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202020202020202020202020100000000000101013903010100000000000102020202020202020202020100000001020202020202390301020202010000000000010139020202390101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101010101010101010101010101010100000000000000000102010000000000000101010101010101010101010100000001010101010101010201010101010000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101010101010101010101010101000000000000000000000102010000000000000000000000000000000000000000000000000000000000010201000000000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020202030202021002020201000000000000000001010102010101000000000000000000000000000000000000000000000000010101010201010101000000000000010139020202390101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102130101010202102d10020201000000000000000001020103390201000000000000000000000000000000000000000000000000012c02010339020201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020100010202021002020201000000000000000001020213020201000000000000000000000000000000000000000000000000010210020202020201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020100010202020202020201000000000000000001020202020201000000000000000000000000000000000000000000000000011002020202020201000000000000010139020202390101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020100010202020202020201000001010101010101020202020201000000000000000000000000000000000000000000000000010202020202020201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102130100010202020602020201000001020213020202020206021001000000000000000000000000000000000000000000000000010202060206020201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020100010101010101010101000001023901010202020202100201000000000000000000000000000000000000000000000000010202020202020201000000000000010139020202390101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020100000001010101010000000001020100010202020210022701000000000101010101010101010101010000000000000000010202060206020201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010202010101010102290201010000000110010001020201010101010100000000012b020201280202020206010101010101010101010202020202020201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102130202020210020602100100000001030100010202010000000000000000000102220201020202020202011002020202020210390202020202021001000000000000010139020202390101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010102020101010201010102010101010110010001020201010101010101010101010c0a1001020202020213031010020202021010031302020202100201000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101020201000102010001020202100101020100010202020202020202020302023902100210060202020202391002020202020210010202020210022b01000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0102020201000102010101020210020202100100010202020206290602023902020313020202020202020202010101010101010101010101390201010101000000000000010139020202390101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+01022b0201000102020202020202100101010100010339020202020202020101010102020202020202020202010000000000000000000000010301000000000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0101010101010101010101010101010100000000010201010101010101010100000101010101010101010101010000000000000000000000010201000000000000000000010101020202010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
 000100001952019550185301653013510115100e5100b520075200152000520123001430017300113001430016300193001b3000970009700097001500013000120001100011000100000e0000d0000c0000b000
-000600001d0702307026070280702907025070220701d0701807015070130701207012070130701507016070180701b0701f070250702b0702d0702b0702907026070220701f0701a07017070150701407014070
-000200001262013630146401565016650176501865018650196501a6501a6501b6501b6501c6501d6501d6501d6501d6501d6501c6501b6501a65019640186401763016630156301462013620136101260012600
-0001000003550065500a5500f5501455017550195501b5501d5501e5501f5501f5501f5501e5501d5501c55019550165501255010550000000000000000000000000000000000000000000000000000000000000
-000100001c650206501f6501b6501865017650196501b6501f6502365024650216501e6501a65015650186501c650236502665024650216501e650186501b6501e6502165023650226501f6501c6501965015650
-00010000026500465006650086500a6500c650116501465019650266503a650000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000200002e6502c65028650246501e65019650146500c650036500265000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-001800002505020150242502435023450215501f7501d0501a1501925017350184501a75012750140501615013250123500f4500e7500d7500d0500e1500e25016350194501a5501875015050117500e7500c750
-000f0000060500a050100501105011050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000f00000e0500c0500a0500605003050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000300000a3500a3500a350190000a3500a3500a35000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00030000163501135015350193501d3502035023350263502a3500c3000b3000f30019300263002230025300283002c3002c30000000000000000000000000000000000000000000000000000000000000000000
+000600001d0302304026020280102901025010220201d0301802015020130201201012010130101501016020180201b0301f030250202b0202d0102b0102901026020220201f0301a03017020150201402014010
+00020000076140c6140f61011610116101361013610166101661018610186101861018610186101661013610116100c6100761003615016151860016600166001360013600136000f6000d6000c6050a60007600
+4801000003530075400c5300f5201352016520185201b5201d5201f5201f5101f5101d5101b510185101651013510115100f5100c510000000000000000000000000000000000000000000000000000000000000
+4c0100001c610206101f6101b6101861017610196101b6101f6102361024610216101e6101a61015610186101c610236102661024610216101e610186101b6101e6152161523615226151f6151c6151961515615
+01010000026240462006620086200a6200c620116201461019615266153a615000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010200002b6202962027620226201d62018620136200c620076150361500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001800002502520110242102431023425215101f7101d0101a1251921017310184101a72512710140101611013125122100f4100e7100d7250d0100e1100e21016025192101a5101871015025117100e7100c710
+000f0000060000a000100001100011000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000f00000e0000c0000a0000600003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000300000a3000a3000a300190000a3000a3000a30000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+15030000163201132015320193201d3202032023320263202a3250c3000b3000f30019300263002230025300283002c3002c30000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+011000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+010f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+111800001d0240e0210e0241d0350e0241c0240e0240e0241d0240e0241c0240e0241d0240e0241d0241d0241d0240e0210e0241d0350e0241c0240e0240e0241d0240e0241c0240e0211d0221d0121d0221d012
+011800000c0230c0230c0002b615306000c5000c0230c6000c0230c0000c0000c0232b6150c5000c0230c6000c0230c0230c0232b615306000c5000c0230c6002b615006000c023006002b6141f6150c0232b615
+011800002b215242152421224212306000c5000c0230c6002b6152b2150c023242152b2150c5000c0230c6000c023272150c600272150c0232721227212272122b6152b2150c023006002b600242140c02324215
+231800002b21524215242122421224200242002b2152b2002b2002b21524215242152b21500000272150000000000272150000027215272122721227212242002b2002b215242152420024200242142421524215
+011800000c023130003060000600306000c5000c0230c6002b615006000c02300600006000c5000c0230c6000c0230c6000c6000c6000c0230c5000c023006002b615006000c023006002b6000c0000c02300000
+011800000701000011030200001003010000100302007010030210001003010000100301000010030200001007010000210701000010030100001007010000100301000021070100001003020070100302000010
+__music__
+00 01020344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+00 41424344
+01 3a3b4344
+02 3a3b4344
+02 78424344
+00 41424344
+00 7a794344
+00 3f7e7d44
+00 3f424344
+01 3f3e4344
+00 3f3e7d44
+02 3f3e7c44
+
