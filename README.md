@@ -18,6 +18,10 @@ The object of the game is to explore the map, avoid death, destroy things, colle
 
 Since this is a roguelike, movement is done one tile at a time. you can rapidly press  the same or different directions and the moves will be queued up - the player moves pretty quick so it’s very responsive (unless you just hold all directional buttons down at the same time for an extended period of time). Holding a direction will queue up movements based on how your input repeats presses when held, so it may continuously move or it might move once and after a delay move continuously. This games requires thought-out and deliberate moves to get the player to safe places, but there are some straight-always that, once you know the map, you’ll be able to just hold a direction (knowing how your particular input works when held) and not be surprised by the outcome.
 
+### Shooting
+
+When you shoot, your shots will travel in the direction you last moved unless a targetable object is within range, in which case you will shoot at the target. You can find upgrades to increase your auto-target range, fire rate, and damage.
+
 ### Enemies
 
 - **Eye** - A green goo thing with one eye that does light ranged and melee damage, and is easy to kill
