@@ -418,8 +418,6 @@ player_type = {
 						this,
 						get_enemy_dmg_for_difficulty(obj.touch_damage)
 					)
-				elseif obj.on_pickup ~= nil then
-					obj.on_pickup(this)
 				elseif obj.type.on_activate ~= nil then
 					obj.type.on_activate(obj)
 				end
@@ -589,7 +587,12 @@ pickup_type = {
 			destroy_object(this)
 			return
 		end
-		if get_range(this, player) <= this.pickup_range then
+		local r = get_range(this, player)
+		if r <= 4 then
+			this.on_pickup()
+			return
+		end
+		if r <= this.pickup_range then
 			local dir = get_direction(this, player)
 			this.x += dir.x
 			this.y += dir.y
@@ -614,7 +617,7 @@ end
 
 function make_hp_pickup(x, y, amount)
 	local pickup = make_pickup(x, y, make_animation({26,27}, 16), 16,true)
-	pickup.on_pickup =	function(player)
+	pickup.on_pickup =	function()
 			sfx(10,3)
 			player.hp = clamp(player.hp + amount, player.hp, player.max_hp)
 			destroy_object(pickup)
